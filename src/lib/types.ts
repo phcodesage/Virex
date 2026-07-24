@@ -15,6 +15,15 @@ export interface Settings {
   timeoutSecs: number;
   maxRetries: number;
   baseUrl: string;
+  targetLang: string;
+}
+
+export interface TranslationResult {
+  success: boolean;
+  translation: string;
+  rawTranslation: string;
+  detectedLanguage: string;
+  targetLanguage: string;
 }
 
 // Streaming events emitted by the backend to the overlay window.

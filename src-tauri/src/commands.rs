@@ -1,6 +1,6 @@
 //! Tauri command handlers exposed to the frontend.
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::{
@@ -114,4 +114,37 @@ pub async fn replace_selection(
         }
     })
     .map_err(|e| e.to_string())
+}
+
+/// Translate given text using Google Translate web API, then paraphrase using DeepSeek.
+#[tauri::command]
+pub async fn translate_message(
+    state: State<'_, AppState>,
+    text: String,
+    target_lang: Option<String>,
+) -> CmdResult<crate::translator::TranslationResult> {
+    if text.trim().is_empty() {
+        return Err("No text provided".into());
+    }
+
+    let target_lang = target_lang.unwrap_or_else(|| state.settings().target_lang.clone());
+    let api_key = keychain::get_api_key().unwrap_or_default();
+    let settings = state.settings();
+
+    crate::translator::translate_and_paraphrase(&api_key, &settings, &text, &target_lang, |_| {})
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Translate captured selection using Google Translate + DeepSeek paraphrase.
+#[tauri::command]
+pub fn translate_selection(app: AppHandle, target_lang: Option<String>) -> CmdResult {
+    let selection = app.state::<AppState>().last_selection();
+    if let Some(text) = selection {
+        let _ = overlay::show(&app);
+        pipeline::translate(app, text, target_lang);
+        Ok(())
+    } else {
+        Err("No text selected".into())
+    }
 }

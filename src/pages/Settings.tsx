@@ -122,6 +122,18 @@ export const Settings: Component = () => {
           </p>
         </Field>
 
+        <Field label="Translation Target Language">
+          <input
+            value={s()!.targetLang || "en"}
+            onInput={(e) => patch({ targetLang: e.currentTarget.value })}
+            placeholder="en"
+            class="vx-input"
+          />
+          <p class="mt-1 text-xs opacity-50">
+            Language code for Google Translate (e.g. <code>en</code>, <code>es</code>, <code>fr</code>, <code>de</code>, <code>zh-CN</code>, <code>ja</code>).
+          </p>
+        </Field>
+
         <Field label="Theme">
           <div class="flex gap-2">
             {(["system", "light", "dark"] as Theme[]).map((t) => (

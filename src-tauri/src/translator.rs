@@ -1,0 +1,175 @@
+//! Google Translate + DeepSeek paraphrasing module.
+
+use std::time::Duration;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::{deepseek, settings::Settings};
+
+#[derive(Debug, Error)]
+pub enum TranslateError {
+    #[error("No text provided")]
+    EmptyText,
+    #[error("Network error: {0}")]
+    Network(String),
+    #[error("Translation API error ({status})")]
+    ApiError { status: u16 },
+    #[error("Failed to parse translation response")]
+    ParseError,
+    #[error("DeepSeek error: {0}")]
+    DeepSeek(#[from] deepseek::DeepSeekError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationResult {
+    pub success: bool,
+    pub translation: String,
+    pub raw_translation: String,
+    pub detected_language: String,
+    pub target_language: String,
+}
+
+/// Call free Google Translate web API (gtx client).
+pub async fn google_translate(
+    text: &str,
+    target_lang: &str,
+) -> Result<(String, String), TranslateError> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err(TranslateError::EmptyText);
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| TranslateError::Network(e.to_string()))?;
+
+    let url = "https://translate.googleapis.com/translate_a/single";
+    let resp = client
+        .get(url)
+        .query(&[
+            ("client", "gtx"),
+            ("sl", "auto"),
+            ("tl", target_lang),
+            ("dt", "t"),
+            ("q", trimmed),
+        ])
+        .send()
+        .await
+        .map_err(|e| TranslateError::Network(e.to_string()))?;
+
+    if !resp.status().is_success() {
+        return Err(TranslateError::ApiError {
+            status: resp.status().as_u16(),
+        });
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|_| TranslateError::ParseError)?;
+
+    // Parse translated text from result[0]
+    let mut translation = String::new();
+    if let Some(sentences) = json.get(0).and_then(|v| v.as_array()) {
+        for s in sentences {
+            if let Some(chunk) = s.get(0).and_then(|v| v.as_str()) {
+                translation.push_str(chunk);
+            }
+        }
+    }
+
+    if translation.is_empty() {
+        return Err(TranslateError::ParseError);
+    }
+
+    // Detected language from result[2]
+    let detected_lang = json
+        .get(2)
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    Ok((translation, detected_lang))
+}
+
+/// Translate text using Google Translate, then paraphrase with DeepSeek for clarity.
+pub async fn translate_and_paraphrase<F>(
+    api_key: &str,
+    settings: &Settings,
+    text: &str,
+    target_lang: &str,
+    mut on_delta: F,
+) -> Result<TranslationResult, TranslateError>
+where
+    F: FnMut(&str),
+{
+    // Step 1: Translate using free Google Translate API
+    let (raw_translation, detected_lang) = google_translate(text, target_lang).await?;
+
+    // Step 2: Paraphrase using DeepSeek for clarity (if API key is available)
+    let paraphrased = if !api_key.trim().is_empty() {
+        let prompt = format!(
+            "You are an expert writing assistant and translator. Refine and paraphrase the following translated text into clear, fluent, natural {target_lang}.\n\nRules:\n- Preserve the exact meaning and key information.\n- Do not add explanations or meta commentary.\n- Output ONLY the final paraphrased text.\n\nText:\n{raw_translation}"
+        );
+
+        match deepseek::stream_rewrite(
+            deepseek::RewriteRequest {
+                api_key,
+                settings,
+                input: &prompt,
+            },
+            |delta| {
+                on_delta(delta);
+            },
+        )
+        .await
+        {
+            Ok(full) => full,
+            Err(e) => {
+                log::warn!("DeepSeek paraphrase failed ({e}); falling back to raw Google Translation");
+                on_delta(&raw_translation);
+                raw_translation.clone()
+            }
+        }
+    } else {
+        on_delta(&raw_translation);
+        raw_translation.clone()
+    };
+
+    Ok(TranslationResult {
+        success: true,
+        translation: paraphrased,
+        raw_translation,
+        detected_language: detected_lang,
+        target_language: target_lang.to_string(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serializes_translation_result_camel_case() {
+        let res = TranslationResult {
+            success: true,
+            translation: "Hello world".into(),
+            raw_translation: "Hola mundo".into(),
+            detected_language: "es".into(),
+            target_language: "en".into(),
+        };
+        let json = serde_json::to_string(&res).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"rawTranslation\":\"Hola mundo\""));
+        assert!(json.contains("\"detectedLanguage\":\"es\""));
+        assert!(json.contains("\"targetLanguage\":\"en\""));
+    }
+
+    #[tokio::test]
+    async fn google_translate_rejects_empty_input() {
+        let res = google_translate("   ", "en").await;
+        assert!(matches!(res, Err(TranslateError::EmptyText)));
+    }
+}

@@ -37,6 +37,12 @@ pub struct Settings {
     pub max_retries: u32,
     /// OpenAI-compatible base URL for the DeepSeek API.
     pub base_url: String,
+    #[serde(default = "default_target_lang")]
+    pub target_lang: String,
+}
+
+fn default_target_lang() -> String {
+    "en".into()
 }
 
 impl Default for Settings {
@@ -59,6 +65,7 @@ impl Default for Settings {
             timeout_secs: 30,
             max_retries: 1,
             base_url: "https://api.deepseek.com".into(),
+            target_lang: "en".into(),
         }
     }
 }
