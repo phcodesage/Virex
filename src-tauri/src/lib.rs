@@ -61,6 +61,8 @@ pub fn run() {
             commands::close_overlay,
             commands::translate_message,
             commands::translate_selection,
+            commands::reply_native_message,
+            commands::reply_native_selection,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

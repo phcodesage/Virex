@@ -181,3 +181,46 @@ pub fn translate(app: AppHandle, input: String, target_lang: Option<String>) {
         }
     });
 }
+
+/// Run native language reply generation and stream result to overlay.
+pub fn reply_native(app: AppHandle, input: String, target_lang: Option<String>) {
+    StreamEvent::Start {
+        original: input.clone(),
+    }
+    .emit(&app);
+
+    let api_key = keychain::get_api_key().unwrap_or_default();
+    let settings = app.state::<AppState>().settings();
+
+    tauri::async_runtime::spawn(async move {
+        let app_for_delta = app.clone();
+        let result = crate::translator::generate_native_reply(
+            &api_key,
+            &settings,
+            &input,
+            target_lang.as_deref(),
+            |delta| {
+                StreamEvent::Delta {
+                    text: delta.to_string(),
+                }
+                .emit(&app_for_delta);
+            },
+        )
+        .await;
+
+        match result {
+            Ok(res) => {
+                if settings.auto_copy {
+                    let _ = crate::input::set_clipboard_text(&res.reply);
+                }
+                StreamEvent::Done { full: res.reply }.emit(&app);
+            }
+            Err(e) => {
+                StreamEvent::Error {
+                    message: e.to_string(),
+                }
+                .emit(&app);
+            }
+        }
+    });
+}

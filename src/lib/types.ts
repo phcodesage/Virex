@@ -27,6 +27,13 @@ export interface TranslationResult {
   targetLanguage: string;
 }
 
+export interface NativeReplyResult {
+  success: boolean;
+  reply: string;
+  detectedLanguage: string;
+  detectedLanguageName: string;
+}
+
 // Streaming events emitted by the backend to the overlay window.
 export type StreamEvent =
   | { kind: "start"; original: string }

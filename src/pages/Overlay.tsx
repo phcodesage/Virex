@@ -44,6 +44,7 @@ export const Overlay: Component = () => {
   const doCopy = () => void api.copyToClipboard(text());
   const doRetry = () => void api.retry();
   const doTranslate = () => void api.translateSelection();
+  const doReplyNative = () => void api.replyNativeSelection();
   const doClose = () => void api.closeOverlay();
 
   const onKey = (e: KeyboardEvent) => {
@@ -66,6 +67,9 @@ export const Overlay: Component = () => {
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "t") {
       e.preventDefault();
       doTranslate();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+      e.preventDefault();
+      doReplyNative();
     }
   };
 
@@ -125,6 +129,7 @@ export const Overlay: Component = () => {
               },
               { label: "Copy", hint: "⌘C", onClick: doCopy, disabled: !text() },
               { label: "Translate", hint: "⌘T", onClick: doTranslate },
+              { label: "Reply Native", hint: "⌘N", onClick: doReplyNative },
               { label: "Retry", hint: "⌘R", onClick: doRetry },
             ]}
           />

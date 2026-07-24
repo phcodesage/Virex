@@ -1,7 +1,7 @@
 // Thin typed wrappers around Tauri commands + event channels.
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { Settings, StreamEvent, TranslationResult } from "./types";
+import type { NativeReplyResult, Settings, StreamEvent, TranslationResult } from "./types";
 
 export function getSettings(): Promise<Settings> {
   return invoke("get_settings");
@@ -61,6 +61,19 @@ export function translateMessage(
 /** Translate the last captured selection and stream to overlay. */
 export function translateSelection(targetLang?: string): Promise<void> {
   return invoke("translate_selection", { targetLang });
+}
+
+/** Detect native language and generate a natural reply (e.g. Indonesian). */
+export function replyNativeMessage(
+  text: string,
+  targetLang?: string
+): Promise<NativeReplyResult> {
+  return invoke("reply_native_message", { text, targetLang });
+}
+
+/** Generate a native reply for captured selection and stream to overlay. */
+export function replyNativeSelection(targetLang?: string): Promise<void> {
+  return invoke("reply_native_selection", { targetLang });
 }
 
 /** Subscribe to streaming rewrite events. Returns an unlisten fn. */

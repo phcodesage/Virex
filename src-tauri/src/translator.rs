@@ -147,6 +147,113 @@ where
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeReplyResult {
+    pub success: bool,
+    pub reply: String,
+    pub detected_language: String,
+    pub detected_language_name: String,
+}
+
+/// Convert ISO language code into a human-readable language name.
+pub fn lang_code_to_name(code: &str) -> &'static str {
+    let clean = code.split('-').next().unwrap_or(code).to_lowercase();
+    match clean.as_str() {
+        "id" | "ind" => "Indonesian",
+        "es" => "Spanish",
+        "ja" => "Japanese",
+        "zh" => "Chinese",
+        "fr" => "French",
+        "de" => "German",
+        "ko" => "Korean",
+        "pt" => "Portuguese",
+        "ru" => "Russian",
+        "ar" => "Arabic",
+        "hi" => "Hindi",
+        "th" => "Thai",
+        "vi" => "Vietnamese",
+        "nl" => "Dutch",
+        "it" => "Italian",
+        "tr" => "Turkish",
+        "pl" => "Polish",
+        "sv" => "Swedish",
+        "en" => "English",
+        _ => "the native language of the message",
+    }
+}
+
+/// Detect the native language of the message/draft and generate a natural reply in that native language.
+pub async fn generate_native_reply<F>(
+    api_key: &str,
+    settings: &Settings,
+    text: &str,
+    target_lang_override: Option<&str>,
+    mut on_delta: F,
+) -> Result<NativeReplyResult, TranslateError>
+where
+    F: FnMut(&str),
+{
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err(TranslateError::EmptyText);
+    }
+
+    // Step 1: Detect the language of the incoming message or text
+    let (_, detected_lang_code) = google_translate(trimmed, "en")
+        .await
+        .unwrap_or_else(|_| (String::new(), "unknown".into()));
+
+    let target_lang_code = target_lang_override.unwrap_or(&detected_lang_code);
+    let lang_name = lang_code_to_name(target_lang_code);
+
+    // Step 2: Use DeepSeek to craft an authentic, natural reply in the native language
+    let prompt = format!(
+        "You are an expert native speaker and writing assistant in {lang_name}.\n\
+         Generate or translate a natural, friendly, and contextually fluent reply in {lang_name} for the following message/draft.\n\n\
+         Rules:\n\
+         - Match the tone, slang, and cultural nuances of conversational {lang_name}.\n\
+         - Keep it authentic, engaging, and natural (e.g. for Indonesian, use natural conversational tone like 'Siap, ayo gas bro!').\n\
+         - Do not include explanations, meta commentary, or quotes.\n\
+         - Output ONLY the final native reply.\n\n\
+         Message/Draft:\n{trimmed}"
+    );
+
+    let reply = if !api_key.trim().is_empty() {
+        match deepseek::stream_rewrite(
+            deepseek::RewriteRequest {
+                api_key,
+                settings,
+                input: &prompt,
+            },
+            |delta| {
+                on_delta(delta);
+            },
+        )
+        .await
+        {
+            Ok(full) => full,
+            Err(e) => {
+                log::warn!("DeepSeek native reply generation failed ({e}); falling back to Google Translate");
+                let (translated, _) = google_translate(trimmed, target_lang_code).await?;
+                on_delta(&translated);
+                translated
+            }
+        }
+    } else {
+        let (translated, _) = google_translate(trimmed, target_lang_code).await?;
+        on_delta(&translated);
+        translated
+    };
+
+    Ok(NativeReplyResult {
+        success: true,
+        reply,
+        detected_language: detected_lang_code,
+        detected_language_name: lang_name.to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,6 +272,14 @@ mod tests {
         assert!(json.contains("\"rawTranslation\":\"Hola mundo\""));
         assert!(json.contains("\"detectedLanguage\":\"es\""));
         assert!(json.contains("\"targetLanguage\":\"en\""));
+    }
+
+    #[test]
+    fn maps_language_codes_correctly() {
+        assert_eq!(lang_code_to_name("id"), "Indonesian");
+        assert_eq!(lang_code_to_name("es"), "Spanish");
+        assert_eq!(lang_code_to_name("ja"), "Japanese");
+        assert_eq!(lang_code_to_name("zh-CN"), "Chinese");
     }
 
     #[tokio::test]
