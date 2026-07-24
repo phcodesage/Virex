@@ -18,7 +18,7 @@ pub const KEYCHAIN_LICENSE_ACCOUNT: &str = "virex-license";
 /// Virex API proxy (Cloudflare Worker) that holds the DeepSeek key and enforces
 /// plan limits. Overridable via `api_base` in settings.toml so the endpoint can
 /// be repointed without a rebuild.
-pub const DEFAULT_API_BASE: &str = "https://virex-api.phcodesage.workers.dev";
+pub const DEFAULT_API_BASE: &str = "https://virex-api.rechceltoledo.workers.dev";
 
 /// Label of the floating overlay window.
 pub const OVERLAY_LABEL: &str = "overlay";
