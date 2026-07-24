@@ -11,13 +11,15 @@ Built with Rust + Tauri v2 + SolidJS. No dock icon, no Electron, no subscription
 **[Download the latest release](https://github.com/phcodesage/Virex/releases/latest)** ·
 **[virex-eta.vercel.app](https://virex-eta.vercel.app)**
 
+![Virex rewriting a client message in place](landing/demo.gif)
+
 ---
 
 ## Install
 
-1. Download `Virex_<version>_aarch64.dmg` from
+1. Download `Virex_<version>_universal.dmg` from
    [Releases](https://github.com/phcodesage/Virex/releases/latest)
-   (Apple Silicon, macOS 12+).
+   — one installer for both Apple Silicon and Intel Macs (macOS 12+).
 2. Open the DMG and drag **Virex** to Applications.
 3. Virex isn't signed with a paid Apple Developer certificate, so macOS blocks
    downloaded copies. Clear the quarantine flag once:
@@ -96,7 +98,11 @@ cd Virex
 pnpm install
 
 pnpm tauri dev      # run in development
-pnpm tauri build    # produce a .app / .dmg
+pnpm tauri build    # .app / .dmg for this machine's arch
+
+# Universal build (Intel + Apple Silicon) — what releases ship:
+rustup target add x86_64-apple-darwin
+pnpm tauri build --target universal-apple-darwin
 ```
 
 The app talks to the API proxy in [`worker/`](worker/), which holds the DeepSeek
@@ -143,7 +149,6 @@ switched by window label. `landing/` holds the static marketing site, and
 
 ## Known limitations
 
-- **Apple Silicon only** builds are published; build from source for Intel.
 - **Not notarized.** Gatekeeper rejects the app until it's signed with a paid
   Apple Developer ID, hence the `xattr` step above.
 - Anchoring the overlay to the selected text relies on macOS Accessibility
