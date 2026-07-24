@@ -3,13 +3,18 @@ import { type Component, createSignal, onCleanup, onMount, Show } from "solid-js
 import * as api from "../lib/api";
 
 /**
- * Permission-only settings window. Its sole job is to get Virex trusted for
- * Accessibility (needed to read and replace the selection). Model, prompt, and
- * other config live in the app defaults / settings.toml, not here.
+ * Setup window: the two things Virex needs to work — Accessibility permission
+ * (to read and replace the selection) and a DeepSeek API key (bring your own).
+ * Model, prompt, and other tuning live in the app defaults / settings.toml.
  */
 export const Settings: Component = () => {
   const [trusted, setTrusted] = createSignal(true);
   const [version, setVersion] = createSignal("");
+  const [apiKey, setApiKey] = createSignal("");
+  const [keyStored, setKeyStored] = createSignal(false);
+  const [savingKey, setSavingKey] = createSignal(false);
+  const [keyError, setKeyError] = createSignal("");
+  const [keySaved, setKeySaved] = createSignal(false);
   let poll: number | undefined;
 
   const refresh = async () => {
@@ -33,8 +38,27 @@ export const Settings: Component = () => {
     }
   };
 
+  const saveKey = async () => {
+    const key = apiKey().trim();
+    if (!key) return;
+    setSavingKey(true);
+    setKeyError("");
+    try {
+      await api.setApiKey(key);
+      setApiKey("");
+      setKeyStored(true);
+      setKeySaved(true);
+      setTimeout(() => setKeySaved(false), 2000);
+    } catch (e) {
+      setKeyError(String(e));
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
   onMount(async () => {
     getVersion().then(setVersion).catch(() => {});
+    setKeyStored(await api.hasApiKey());
     const ok = await refresh();
     // Ask straight away on open if we're not trusted yet.
     if (!ok) void requestAccess();
@@ -45,7 +69,7 @@ export const Settings: Component = () => {
   });
 
   return (
-    <div class="mx-auto max-w-md space-y-6 p-8 text-black/90 dark:text-white/90">
+    <div class="mx-auto max-w-md space-y-5 p-8 text-black/90 dark:text-white/90">
       <header class="flex items-center gap-3">
         <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500 text-lg font-bold text-white">
           V
@@ -61,6 +85,7 @@ export const Settings: Component = () => {
         </div>
       </header>
 
+      {/* 1 — Accessibility permission */}
       <Show
         when={!trusted()}
         fallback={
@@ -69,7 +94,7 @@ export const Settings: Component = () => {
               Accessibility granted ✓
             </p>
             <p class="mt-1 opacity-70">
-              Virex is ready. Select text anywhere and press your shortcut.
+              Virex can read and replace your selected text.
             </p>
           </div>
         }
@@ -102,6 +127,53 @@ export const Settings: Component = () => {
               Open System Settings
             </button>
           </div>
+        </div>
+      </Show>
+
+      {/* 2 — DeepSeek API key */}
+      <div class="space-y-2">
+        <div class="flex items-baseline justify-between">
+          <label class="text-sm font-medium">DeepSeek API Key</label>
+          <Show when={keyStored()}>
+            <span class="text-xs text-green-600 dark:text-green-400">Saved ✓</span>
+          </Show>
+        </div>
+        <input
+          type="password"
+          value={apiKey()}
+          onInput={(e) => setApiKey(e.currentTarget.value)}
+          onKeyDown={(e) => e.key === "Enter" && saveKey()}
+          placeholder={keyStored() ? "•••••••••• (stored in Keychain)" : "sk-…"}
+          class="vx-input"
+          autocomplete="off"
+          spellcheck={false}
+        />
+        <div class="flex items-center gap-2">
+          <button
+            onClick={saveKey}
+            disabled={!apiKey().trim() || savingKey()}
+            class="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {savingKey() ? "Saving…" : keyStored() ? "Replace key" : "Save key"}
+          </button>
+          <Show when={keySaved()}>
+            <span class="text-xs text-green-500">Key saved to Keychain</span>
+          </Show>
+          <Show when={keyError()}>
+            <span class="text-xs text-red-500">{keyError()}</span>
+          </Show>
+        </div>
+        <p class="text-xs opacity-50">
+          Virex uses your own key, so your text goes straight to DeepSeek — never
+          through our servers. Create one at platform.deepseek.com, then paste it
+          here. It's stored in the macOS Keychain.
+          {keyStored() ? " Leave blank to keep the current key." : ""}
+        </p>
+      </div>
+
+      <Show when={trusted() && keyStored()}>
+        <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs opacity-80">
+          You're all set — select text anywhere and press your shortcut.
         </div>
       </Show>
     </div>
