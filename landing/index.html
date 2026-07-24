@@ -242,6 +242,11 @@
     padding: 14px 16px; max-width: 560px; margin-left: auto; margin-right: auto; text-align: left;
   }
   .install b { color: var(--muted); font-weight: 600; }
+  .install .cmd {
+    display: block; margin: 10px 0; padding: 11px 13px;
+    background: rgba(0,0,0,0.45); border: 1px solid var(--line-2); border-radius: 9px;
+    color: var(--accent-ink); font-size: 0.82rem; user-select: all; overflow-x: auto;
+  }
 
   /* ---- footer ---- */
   footer { border-top: 1px solid var(--line); padding: 40px 0 60px; position: relative; z-index: 1; }
@@ -417,7 +422,9 @@
         <a class="btn btn-ghost" href="https://ko-fi.com/phcodesage">☕ Support on Ko-fi</a>
       </div>
       <div class="install">
-        <b>First launch:</b> macOS may say the app is from an unidentified developer — right-click Virex &rarr; <b>Open</b> to confirm. Then grant <b>Accessibility</b> access so Virex can read and replace your selection.
+        <b>First launch:</b> Virex isn't signed with a paid Apple certificate yet, so macOS blocks downloaded copies. Drag it to Applications, then run this once in Terminal:
+        <div class="cmd">xattr -cr /Applications/Virex.app</div>
+        Open Virex, then grant <b>Accessibility</b> access so it can read and replace your selection.
       </div>
     </div>
   </section>
