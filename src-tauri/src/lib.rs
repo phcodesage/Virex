@@ -5,6 +5,7 @@
 //! overlay, and pastes it back over the selection on Enter.
 
 mod accessibility;
+mod axselect;
 mod commands;
 mod config;
 mod deepseek;
@@ -40,6 +41,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(logging::plugin())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(

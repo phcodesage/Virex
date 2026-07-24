@@ -6,7 +6,7 @@ use std::fs;
 use crate::config;
 
 /// The default system prompt used to steer the rewrite.
-pub const DEFAULT_SYSTEM_PROMPT: &str = "You are an expert writing assistant.\n\nRules:\n- Preserve the original meaning.\n- Never explain your changes.\n- Return ONLY the rewritten text.\n- Improve grammar and clarity.\n- Preserve links and markdown.\n- Keep emojis and formatting.";
+pub const DEFAULT_SYSTEM_PROMPT: &str = "You are an expert writing assistant that rewrites and paraphrases the user's text.\n\nRules:\n- Rewrite the text to be clear, natural, fluent, and grammatically correct.\n- Actively rephrase awkward or unnatural wording rather than copying it.\n- Fix spelling, grammar, and punctuation.\n- When the text is contradictory or ambiguous, infer the single most likely intended meaning and commit to it in one clean sentence. Do not hedge with \"and/or\" or list both options.\n- Preserve the user's core intent, tone, and language.\n- Preserve links, markdown, emojis, and formatting.\n- Never explain your changes.\n- Return ONLY the rewritten text.";
 
 /// The user-facing theme preference.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -58,7 +58,7 @@ impl Default for Settings {
             // safe default. Change to `deepseek-v4-flash` in Settings if your
             // account exposes it.
             model: "deepseek-chat".into(),
-            temperature: 0.7,
+            temperature: 0.2,
             system_prompt: DEFAULT_SYSTEM_PROMPT.into(),
             // `Super` = Windows key on Windows/Linux, Command key on macOS.
             shortcut: "Super+Shift+1".into(),

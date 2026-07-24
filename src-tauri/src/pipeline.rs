@@ -67,6 +67,10 @@ pub fn trigger(app: AppHandle) {
 
     state.set_last_selection(Some(selected.clone()));
 
+    // Selection is captured — now it's safe to take key focus so Esc/Enter and
+    // typing register with no accessory-app lag.
+    let _ = overlay::focus(&app);
+
     rewrite(app, selected);
 }
 
@@ -74,7 +78,10 @@ pub fn trigger(app: AppHandle) {
 pub fn retry(app: AppHandle) {
     let selection = app.state::<AppState>().last_selection();
     if let Some(text) = selection {
+        // Retry reuses the already-captured selection, so there's no ⌘C to
+        // protect — focus the overlay right away.
         let _ = overlay::show(&app);
+        let _ = overlay::focus(&app);
         rewrite(app, text);
     }
 }

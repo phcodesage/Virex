@@ -10,9 +10,11 @@
     "core:window:allow-set-position",
     "core:window:allow-set-focus",
     "core:window:allow-set-always-on-top",
+    "core:window:allow-start-dragging",
     "core:event:default",
     "global-shortcut:default",
     "notification:default",
+    "dialog:default",
     "autostart:default"
   ]
 }

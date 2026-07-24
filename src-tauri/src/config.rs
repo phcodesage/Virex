@@ -5,6 +5,10 @@ use std::path::PathBuf;
 /// Bundle identifier, used for config dir and Keychain service name.
 pub const APP_ID: &str = "com.virex.app";
 
+/// GitHub `owner/repo` whose Releases are checked by "Check for Updates…".
+/// Releases must be tagged `vX.Y.Z` with the DMG attached.
+pub const GITHUB_REPO: &str = "phcodesage/Virex";
+
 /// Keychain service + account under which the DeepSeek API key is stored.
 pub const KEYCHAIN_SERVICE: &str = "com.virex.app";
 pub const KEYCHAIN_ACCOUNT: &str = "deepseek-api-key";
