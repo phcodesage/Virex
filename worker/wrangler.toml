@@ -8,9 +8,8 @@ FREE_DAILY_LIMIT = "10"
 # Payments at or above this (in your Ko-fi currency) grant Pro; anything less is
 # treated as a tip.
 PRO_MIN_AMOUNT = "10"
-# Set only if you want the Worker to email keys itself (needs a verified domain
-# at Resend). Leave blank to send them by hand — the key is stored either way.
-LICENSE_FROM_EMAIL = ""
+# Sender for automatic licence emails. Domain must be verified at Resend.
+LICENSE_FROM_EMAIL = "Virex <keys@swe-rech.site>"
 
 # Secrets — set with `wrangler secret put <NAME>`, never in this file:
 #   DEEPSEEK_API_KEY         the upstream API key

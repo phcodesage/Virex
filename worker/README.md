@@ -83,16 +83,13 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" \
 
 Then reply to them with it. Fine for the first handful of customers.
 
-**Automatically.** Add a [Resend](https://resend.com) account (free tier), verify
-a sending domain, then:
+**Automatically (configured).** Keys are emailed by [Resend](https://resend.com)
+from `Virex <keys@swe-rech.site>` the moment someone subscribes — first payment
+and renewals both. `RESEND_API_KEY` is set as a Worker secret;
+`LICENSE_FROM_EMAIL` lives in `wrangler.toml`.
 
-```bash
-npx wrangler secret put RESEND_API_KEY
-# and set LICENSE_FROM_EMAIL in wrangler.toml, e.g. "Virex <keys@yourdomain.com>"
-```
-
-The Worker then emails the key the moment someone subscribes. Note Resend needs
-a **domain you own** — it can't send from `.vercel.app`.
+To move to a different sender, verify the domain at Resend, update
+`LICENSE_FROM_EMAIL`, and redeploy.
 
 ### How cancellation works
 
