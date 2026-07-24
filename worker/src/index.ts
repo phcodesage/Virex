@@ -291,13 +291,6 @@ async function sendLicenseEmail(
   if (!env.RESEND_API_KEY || !env.LICENSE_FROM_EMAIL) return false;
 
   const subject = isRenewal ? "Your Virex Pro licence (renewed)" : "Your Virex Pro licence key";
-  const body = [
-    `<p>Thanks for supporting Virex!</p>`,
-    `<p>Your Pro licence key is:</p>`,
-    `<p style="font-family:monospace;font-size:18px"><strong>${key}</strong></p>`,
-    `<p>Open Virex &rarr; Settings &rarr; <em>I have a key</em>, paste it in, and press Activate.</p>`,
-    `<p>It stays active as long as your Ko-fi subscription is running.</p>`,
-  ].join("");
 
   try {
     const resp = await fetch("https://api.resend.com/emails", {
@@ -306,12 +299,110 @@ async function sendLicenseEmail(
         Authorization: `Bearer ${env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: env.LICENSE_FROM_EMAIL, to, subject, html: body }),
+      body: JSON.stringify({
+        from: env.LICENSE_FROM_EMAIL,
+        to,
+        subject,
+        html: licenseEmailHtml(key, isRenewal),
+        text: licenseEmailText(key, isRenewal),
+      }),
     });
     return resp.ok;
   } catch {
     return false;
   }
+}
+
+/**
+ * Licence email. Table-based with inline styles — email clients strip <style>
+ * blocks and don't support flex/grid.
+ */
+function licenseEmailHtml(key: string, isRenewal: boolean): string {
+  const heading = isRenewal ? "Your Pro licence is renewed" : "Welcome to Virex Pro";
+  const lede = isRenewal
+    ? "Thanks for sticking around. Your subscription renewed — the key below is the same one you already have, no need to re-enter it."
+    : "Thanks for supporting Virex. Unlimited rewrites are ready to switch on.";
+
+  return `<!doctype html>
+<html>
+<body style="margin:0;padding:0;background:#f4f6fb;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${heading} — your key is ${key}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:32px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(16,24,40,0.06);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;">
+
+        <tr><td style="background:#3580fb;background-image:linear-gradient(135deg,#3580fb,#1a57d9);padding:32px 32px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="padding-right:12px;">
+              <img src="https://virex-eta.vercel.app/icon.png" width="40" height="40" alt="" style="display:block;border-radius:10px;" />
+            </td>
+            <td style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">Virex</td>
+          </tr></table>
+          <div style="margin-top:20px;font-size:24px;line-height:1.25;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${heading}</div>
+        </td></tr>
+
+        <tr><td style="padding:28px 32px 8px;font-size:15px;line-height:1.6;color:#475467;">${lede}</td></tr>
+
+        <tr><td style="padding:16px 32px 4px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#98a2b3;padding-bottom:8px;">Your licence key</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr><td align="center" style="background:#f2f6ff;border:1px solid #d6e2ff;border-radius:10px;padding:18px 12px;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:21px;font-weight:700;color:#1a57d9;letter-spacing:1.5px;">${key}</td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:26px 32px 4px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#98a2b3;padding-bottom:12px;">Activate it</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="font-size:14px;line-height:1.5;color:#475467;">
+            <tr><td width="26" valign="top" style="padding-bottom:10px;color:#3580fb;font-weight:700;">1</td><td style="padding-bottom:10px;">Open Virex from your menu bar and choose <strong style="color:#101828;">Open Settings</strong></td></tr>
+            <tr><td width="26" valign="top" style="padding-bottom:10px;color:#3580fb;font-weight:700;">2</td><td style="padding-bottom:10px;">Click <strong style="color:#101828;">I have a key</strong></td></tr>
+            <tr><td width="26" valign="top" color="#3580fb" style="color:#3580fb;font-weight:700;">3</td><td>Paste the key and press <strong style="color:#101828;">Activate</strong></td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:24px 32px 30px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td align="center" style="background:#3580fb;border-radius:10px;">
+              <a href="https://github.com/phcodesage/Virex/releases/latest" style="display:block;padding:13px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Download the latest Virex</a>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="padding:20px 32px 28px;border-top:1px solid #eaecf0;font-size:12.5px;line-height:1.6;color:#98a2b3;">
+          Your key stays active while your Ko-fi subscription is running.
+          Lost it? Just reply to this email.
+          <div style="padding-top:10px;">— Virex · <a href="https://virex-eta.vercel.app" style="color:#3580fb;text-decoration:none;">virex-eta.vercel.app</a></div>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** Plain-text alternative — improves deliverability and covers text-only clients. */
+function licenseEmailText(key: string, isRenewal: boolean): string {
+  return [
+    isRenewal ? "Your Virex Pro licence is renewed" : "Welcome to Virex Pro",
+    "",
+    isRenewal
+      ? "Your subscription renewed. This is the same key you already have."
+      : "Thanks for supporting Virex. Unlimited rewrites are ready to switch on.",
+    "",
+    `Your licence key: ${key}`,
+    "",
+    "Activate it:",
+    "  1. Open Virex from your menu bar and choose Open Settings",
+    "  2. Click 'I have a key'",
+    "  3. Paste the key and press Activate",
+    "",
+    "Download the latest Virex: https://github.com/phcodesage/Virex/releases/latest",
+    "",
+    "Your key stays active while your Ko-fi subscription is running.",
+    "Lost it? Just reply to this email.",
+    "",
+    "— Virex · https://virex-eta.vercel.app",
+  ].join("\n");
 }
 
 /** Look up the key issued to an email, for answering "where's my key?" support. */
