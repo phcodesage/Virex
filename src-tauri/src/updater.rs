@@ -4,33 +4,70 @@
 //! public key baked into `tauri.conf.json` before installing, so a tampered or
 //! third-party build can't be pushed to users.
 
+use std::time::Duration;
+
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::UpdaterExt;
 
+/// How long after launch the automatic check runs. Long enough that it never
+/// competes with building the tray and warming the overlay.
+const LAUNCH_CHECK_DELAY: Duration = Duration::from_secs(10);
+
 /// Check for a newer release and, with the user's consent, install it.
+///
+/// Driven by the tray's "Check for Updates…", so it reports every outcome —
+/// silence in response to a click reads as a broken menu item.
 pub fn check(app: &AppHandle) {
+    spawn_check(app, true);
+}
+
+/// The same check, run shortly after launch without being asked.
+///
+/// This one stays quiet unless there is genuinely something to install: an
+/// "up to date" or "the network is down" dialog on every launch would be an
+/// interruption the user never asked for.
+pub fn check_on_launch(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(LAUNCH_CHECK_DELAY).await;
+        spawn_check(&app, false);
+    });
+}
+
+fn spawn_check(app: &AppHandle, announce: bool) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let current = app.package_info().version.to_string();
 
         let updater = match app.updater() {
             Ok(u) => u,
-            Err(e) => return report_error(&app, format!("Couldn't start the updater.\n\n{e}")),
+            Err(e) => {
+                log::warn!("updater unavailable: {e}");
+                if announce {
+                    report_error(&app, format!("Couldn't start the updater.\n\n{e}"));
+                }
+                return;
+            }
         };
 
         match updater.check().await {
             Ok(Some(update)) => prompt_and_install(app, update, current).await,
             Ok(None) => {
-                app.dialog()
-                    .message(format!("You're on the latest version ({current})."))
-                    .title("Virex is up to date")
-                    .kind(MessageDialogKind::Info)
-                    .show(|_| {});
+                log::info!("no update available (running {current})");
+                if announce {
+                    app.dialog()
+                        .message(format!("You're on the latest version ({current})."))
+                        .title("Virex is up to date")
+                        .kind(MessageDialogKind::Info)
+                        .show(|_| {});
+                }
             }
             Err(e) => {
                 log::warn!("update check failed: {e}");
-                report_error(&app, format!("Couldn't check for updates.\n\n{e}"));
+                if announce {
+                    report_error(&app, format!("Couldn't check for updates.\n\n{e}"));
+                }
             }
         }
     });

@@ -1,6 +1,6 @@
 [package]
 name = "virex"
-version = "1.6.3"
+version = "1.6.4"
 description = "Native AI writing assistant for macOS"
 authors = ["Virex"]
 edition = "2021"

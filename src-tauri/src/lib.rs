@@ -92,6 +92,10 @@ pub fn run() {
                 log::error!("tray build failed: {e}");
             }
 
+            // Look for a new version without being asked. Quiet unless there's
+            // something to install.
+            updater::check_on_launch(&handle);
+
             Ok(())
         })
         .build(tauri::generate_context!())
