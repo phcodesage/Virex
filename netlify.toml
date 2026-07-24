@@ -1,0 +1,4 @@
+# Netlify: serve the static landing page from /landing (no build step).
+[build]
+  publish = "landing"
+  command = ""
