@@ -17,13 +17,23 @@ export interface Env {
   VIREX_KV: KVNamespace;
   /** Optional override; defaults to 10. */
   FREE_DAILY_LIMIT?: string;
-  /** Lemon Squeezy store/product ids, so keys from other stores are rejected. */
-  LEMONSQUEEZY_STORE_ID?: string;
-  LEMONSQUEEZY_PRODUCT_ID?: string;
+  /** Upstream model id; defaults to deepseek-v4-flash. */
+  MODEL?: string;
+  /** From Ko-fi's webhook settings — proves a webhook really came from Ko-fi. */
+  KOFI_VERIFICATION_TOKEN?: string;
+  /** Minimum payment (in Ko-fi's currency units) that grants Pro. Default 10. */
+  PRO_MIN_AMOUNT?: string;
+  /** Optional: set to have the Worker email the licence key itself. */
+  RESEND_API_KEY?: string;
+  /** From-address for that email, e.g. "Virex <keys@yourdomain>". */
+  LICENSE_FROM_EMAIL?: string;
+  /** Shared secret guarding the admin lookup endpoint. */
+  ADMIN_TOKEN?: string;
 }
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
-const MODEL = "deepseek-chat";
+/** DeepSeek retired the old `deepseek-chat` id; current names are v4-pro/v4-flash. */
+const DEFAULT_MODEL = "deepseek-v4-flash";
 /** Refuse absurd inputs so one device can't burn the budget in a few calls. */
 const MAX_INPUT_CHARS = 6000;
 /** Counters only need to outlive the day they describe. */
@@ -53,6 +63,12 @@ export default {
       }
       if (url.pathname === "/v1/rewrite" && request.method === "POST") {
         return cors(await handleRewrite(request, env));
+      }
+      if (url.pathname === "/webhooks/kofi" && request.method === "POST") {
+        return await handleKofiWebhook(request, env);
+      }
+      if (url.pathname === "/admin/license" && request.method === "GET") {
+        return await handleAdminLookup(request, env, url);
       }
       if (url.pathname === "/") {
         return cors(json({ ok: true, service: "virex-api" }));
@@ -90,66 +106,25 @@ function licenceOf(request: Request): string | null {
   return m ? m[1].trim() : null;
 }
 
-/** Cache a positive result for 12h and a negative one for 1h, so a cancellation
- *  takes effect within half a day and a fresh purchase works within the hour. */
-const PRO_CACHE_OK_TTL = 60 * 60 * 12;
-const PRO_CACHE_BAD_TTL = 60 * 60;
-
 /**
- * Is this licence currently entitled to Pro?
- *
- * Checks, in order: a manually-issued key in KV (for comps and refunds), a
- * cached verdict, then Lemon Squeezy itself. Caching keeps the hot rewrite path
- * from making a third-party call on every request.
+ * Licences live in KV as `license:<key>` = "active", written by the Ko-fi
+ * webhook. Monthly subscriptions get a 35-day TTL that each payment refreshes,
+ * so a cancelled subscription lapses on its own — Ko-fi sends no "cancelled"
+ * event we could rely on.
  */
 async function isPro(env: Env, licence: string | null): Promise<boolean> {
   if (!licence) return false;
-
-  // Manually issued / comped keys.
-  if ((await env.VIREX_KV.get(`license:${licence}`)) === "active") return true;
-
-  const cached = await env.VIREX_KV.get(`pro:${licence}`);
-  if (cached === "active") return true;
-  if (cached === "inactive") return false;
-
-  const ok = await validateWithLemonSqueezy(env, licence);
-  await env.VIREX_KV.put(`pro:${licence}`, ok ? "active" : "inactive", {
-    expirationTtl: ok ? PRO_CACHE_OK_TTL : PRO_CACHE_BAD_TTL,
-  });
-  return ok;
+  return (await env.VIREX_KV.get(`license:${licence}`)) === "active";
 }
 
-/** Ask Lemon Squeezy whether a licence key is active for our product. */
-async function validateWithLemonSqueezy(env: Env, licence: string): Promise<boolean> {
-  try {
-    const resp = await fetch("https://api.lemonsqueezy.com/v1/licenses/validate", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ license_key: licence }),
-    });
-    if (!resp.ok) return false;
+/** A month plus a few days' grace, so a slightly late renewal doesn't lock someone out. */
+const LICENSE_TTL_SECONDS = 60 * 60 * 24 * 35;
 
-    const data = (await resp.json()) as {
-      valid?: boolean;
-      license_key?: { status?: string };
-      meta?: { store_id?: number; product_id?: number };
-    };
-    if (!data.valid || data.license_key?.status !== "active") return false;
-
-    // Reject otherwise-valid keys issued by a different store or product.
-    const wantStore = env.LEMONSQUEEZY_STORE_ID;
-    const wantProduct = env.LEMONSQUEEZY_PRODUCT_ID;
-    if (wantStore && String(data.meta?.store_id ?? "") !== wantStore) return false;
-    if (wantProduct && String(data.meta?.product_id ?? "") !== wantProduct) return false;
-
-    return true;
-  } catch {
-    // Never let a licence-server hiccup break a paying user's rewrite.
-    return false;
-  }
+function newLicenseKey(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no look-alikes
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const chars = [...bytes].map((b) => alphabet[b % alphabet.length]);
+  return `VIREX-${chars.slice(0, 4).join("")}-${chars.slice(4).join("")}`;
 }
 
 async function planFor(request: Request, env: Env, device: string): Promise<Plan> {
@@ -214,7 +189,7 @@ async function handleRewrite(request: Request, env: Env): Promise<Response> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: env.MODEL?.trim() || DEFAULT_MODEL,
       temperature: 0.2,
       stream: true,
       messages: [
@@ -242,6 +217,116 @@ async function handleRewrite(request: Request, env: Env): Promise<Response> {
       "X-Virex-Remaining": plan.pro ? "unlimited" : String(Math.max(0, plan.remaining - 1)),
     },
   });
+}
+
+/* ---------------------------------------------------------- ko-fi webhook */
+
+interface KofiPayload {
+  verification_token?: string;
+  type?: string;
+  email?: string;
+  amount?: string;
+  from_name?: string;
+  is_subscription_payment?: boolean;
+  is_first_subscription_payment?: boolean;
+  kofi_transaction_id?: string;
+  tier_name?: string;
+}
+
+/**
+ * Ko-fi posts `data=<json>` as form-encoded on every payment. A qualifying
+ * payment issues (or renews) a licence key for that email address.
+ */
+async function handleKofiWebhook(request: Request, env: Env): Promise<Response> {
+  const form = await request.formData().catch(() => null);
+  const raw = form?.get("data");
+  if (typeof raw !== "string") return json({ error: "bad_payload" }, 400);
+
+  let payload: KofiPayload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return json({ error: "bad_json" }, 400);
+  }
+
+  // Ko-fi's shared token is the only thing proving this is really from Ko-fi.
+  const expected = env.KOFI_VERIFICATION_TOKEN;
+  if (!expected || payload.verification_token !== expected) {
+    return json({ error: "bad_token" }, 401);
+  }
+
+  const email = payload.email?.trim().toLowerCase();
+  if (!email) return json({ ok: true, note: "no email on payment; nothing to issue" });
+
+  const amount = Number(payload.amount ?? "0");
+  const minimum = Number(env.PRO_MIN_AMOUNT ?? "10");
+  if (!Number.isFinite(amount) || amount < minimum) {
+    // A tip, not a Pro subscription — thank them and move on.
+    return json({ ok: true, note: "below Pro threshold; treated as a tip" });
+  }
+
+  // Reuse the same key across renewals so the customer never has to re-paste it.
+  const existing = await env.VIREX_KV.get(`kofi:${email}`);
+  const key = existing ?? newLicenseKey();
+
+  await env.VIREX_KV.put(`license:${key}`, "active", { expirationTtl: LICENSE_TTL_SECONDS });
+  // Keep the email→key map alive longer than the licence so renewals find it.
+  await env.VIREX_KV.put(`kofi:${email}`, key, { expirationTtl: LICENSE_TTL_SECONDS * 6 });
+
+  const emailed = await sendLicenseEmail(env, email, key, Boolean(existing));
+
+  return json({ ok: true, issued: !existing, emailed });
+}
+
+/**
+ * Email the key via Resend, when configured. Returns whether it was sent — if
+ * not, the key is still stored and can be looked up with /admin/license.
+ */
+async function sendLicenseEmail(
+  env: Env,
+  to: string,
+  key: string,
+  isRenewal: boolean,
+): Promise<boolean> {
+  if (!env.RESEND_API_KEY || !env.LICENSE_FROM_EMAIL) return false;
+
+  const subject = isRenewal ? "Your Virex Pro licence (renewed)" : "Your Virex Pro licence key";
+  const body = [
+    `<p>Thanks for supporting Virex!</p>`,
+    `<p>Your Pro licence key is:</p>`,
+    `<p style="font-family:monospace;font-size:18px"><strong>${key}</strong></p>`,
+    `<p>Open Virex &rarr; Settings &rarr; <em>I have a key</em>, paste it in, and press Activate.</p>`,
+    `<p>It stays active as long as your Ko-fi subscription is running.</p>`,
+  ].join("");
+
+  try {
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: env.LICENSE_FROM_EMAIL, to, subject, html: body }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Look up the key issued to an email, for answering "where's my key?" support. */
+async function handleAdminLookup(request: Request, env: Env, url: URL): Promise<Response> {
+  const token = request.headers.get("X-Admin-Token");
+  if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: "unauthorized" }, 401);
+
+  const email = url.searchParams.get("email")?.trim().toLowerCase();
+  if (!email) return json({ error: "missing_email" }, 400);
+
+  const key = await env.VIREX_KV.get(`kofi:${email}`);
+  if (!key) return json({ found: false });
+
+  const active = (await env.VIREX_KV.get(`license:${key}`)) === "active";
+  return json({ found: true, key, active });
 }
 
 /* ----------------------------------------------------------------- helpers */

@@ -32,19 +32,23 @@ Built with Rust + Tauri v2 + SolidJS. No dock icon, no Electron, no subscription
 
 ## Setup
 
-Two things are required, both in **Settings**:
+Just one thing: grant **Accessibility** access in Settings, so Virex can read
+your selection and paste the replacement. Virex triggers the system prompt and
+detects the moment you grant it. There's no API key to create and no account.
 
-| | Why |
+## Plans
+
+| | |
 |---|---|
-| **Accessibility** access | Lets Virex read your selection and paste the replacement. Virex triggers the system prompt and detects the moment you grant it. |
-| **DeepSeek API key** | Virex is bring-your-own-key. Your text goes straight to DeepSeek — there is no Virex server. The key is stored in the macOS **Keychain**, never on disk. |
+| **Free** | 10 rewrites per day, resets daily |
+| **Pro** | Unlimited — $10/month on [Ko-fi](https://ko-fi.com/phcodesage) |
 
-Get a key at [platform.deepseek.com](https://platform.deepseek.com).
+Pro arrives as a licence key by email; paste it into Settings → *I have a key*.
 
 ## Use it
 
 ```
-Highlight text  →  ⌘⇧1  →  capture selection (⌘C)  →  DeepSeek (streaming)
+Highlight text  →  ⌘⇧1  →  capture selection (⌘C)  →  Virex API (streaming)
                           →  overlay updates live   →  Enter → paste (⌘V)
 ```
 
@@ -77,9 +81,8 @@ Everything else lives in:
 
 | Key | Default | Notes |
 |---|---|---|
-| `model` | `deepseek-chat` | Any OpenAI-compatible model ID string. |
-| `temperature` | `0.2` | Low by default so rewrites are consistent, not creative. |
 | `system_prompt` | paraphrasing prompt | Rewrites for grammar, clarity, and awkward phrasing. |
+| `api_base` | *(built-in)* | Virex API proxy URL. The proxy picks the model and temperature. |
 | `shortcut` | `Super+Shift+1` | Tauri accelerator syntax (`Super` = ⌘ on macOS). |
 | `launch_at_login`, `auto_copy`, `show_notifications`, `theme` | | |
 
@@ -96,15 +99,19 @@ pnpm tauri dev      # run in development
 pnpm tauri build    # produce a .app / .dmg
 ```
 
-For development you can put a key in `.env` (`cp .env.example .env`) and it is
-moved into the Keychain on first launch. `.env` is gitignored.
+The app talks to the API proxy in [`worker/`](worker/), which holds the DeepSeek
+key and enforces plan limits. See its README to deploy your own; point the app at
+it with `api_base` in `settings.toml`.
 
 ## Privacy
 
-- Your text is sent **only** when you trigger a rewrite, and only to DeepSeek
-  using **your own** API key. Nothing passes through a Virex server.
-- The API key lives in the macOS Keychain (service `com.virex.app`).
-- Prompts, selected text, rewrite output, and keys are **never** logged.
+- Your text is sent **only** when you trigger a rewrite. It goes to the Virex
+  API proxy (`worker/`), which relays it to DeepSeek and streams the result
+  back. It is **not stored or logged** at either hop.
+- Free usage is counted against a random id generated on first run — not a
+  hardware serial, and not tied to any account or personal detail.
+- Your Pro licence key lives in the macOS Keychain (service `com.virex.app`).
+- Prompts, selected text, and rewrite output are **never** logged.
 
 ## Architecture
 
@@ -118,7 +125,8 @@ moved into the Keychain on first launch. `.env` is gitignored.
 | `selection.rs` · `replace.rs` · `input.rs` | Clipboard + ⌘C/⌘V capture & replace. |
 | `axselect.rs` | Accessibility lookup of the selection's on-screen rect, so the overlay can anchor to your text. |
 | `frontmost.rs` | Tracks/reactivates the source app so paste lands correctly. |
-| `deepseek.rs` | Streaming chat-completions client. |
+| `deepseek.rs` | Streaming client for the Virex API proxy. |
+| `device.rs` | Anonymous per-install id used for the free-tier counter. |
 | `overlay.rs` · `window.rs` | Floating overlay + Settings windows. |
 | `accessibility.rs` | Permission detection & prompting. |
 | `keychain.rs` | Secure API key storage. |
@@ -130,7 +138,8 @@ moved into the Keychain on first launch. `.env` is gitignored.
 
 Frontend (`src/`): SolidJS + Tailwind. `pages/Overlay.tsx` is the floating
 window, `pages/Settings.tsx` is the settings window — the same webview bundle
-switched by window label. `landing/` holds the static marketing site.
+switched by window label. `landing/` holds the static marketing site, and
+`worker/` the Cloudflare Worker API proxy.
 
 ## Known limitations
 

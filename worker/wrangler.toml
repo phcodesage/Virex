@@ -5,11 +5,18 @@ compatibility_date = "2026-07-01"
 # Daily free-tier allowance. Pro licences bypass this entirely.
 [vars]
 FREE_DAILY_LIMIT = "10"
-# Lock Pro to keys from your own Lemon Squeezy store/product. Find these in the
-# LS dashboard (Store settings, and the product's URL). Leave blank to accept
-# any valid LS key — fine while testing, not for production.
-LEMONSQUEEZY_STORE_ID = ""
-LEMONSQUEEZY_PRODUCT_ID = ""
+# Payments at or above this (in your Ko-fi currency) grant Pro; anything less is
+# treated as a tip.
+PRO_MIN_AMOUNT = "10"
+# Set only if you want the Worker to email keys itself (needs a verified domain
+# at Resend). Leave blank to send them by hand — the key is stored either way.
+LICENSE_FROM_EMAIL = ""
+
+# Secrets — set with `wrangler secret put <NAME>`, never in this file:
+#   DEEPSEEK_API_KEY         the upstream API key
+#   KOFI_VERIFICATION_TOKEN  from Ko-fi → Settings → Webhooks
+#   ADMIN_TOKEN              guards /admin/license
+#   RESEND_API_KEY           optional, for automatic key emails
 
 # Counters (usage:<device>:<date>) and Pro licences (license:<key>).
 # Create with:  npx wrangler kv namespace create VIREX_KV

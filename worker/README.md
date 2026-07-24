@@ -49,37 +49,64 @@ Headers: X-Virex-Device: <uuid>
 → { "plan": "free", "used": 3, "limit": 10, "remaining": 7 }
 ```
 
-## Pro licences (Lemon Squeezy)
+## Pro licences (Ko-fi)
 
-Payment and licence issuing are handled by Lemon Squeezy — the Worker only
-*verifies* keys, so there are no accounts to build and nothing to issue by hand.
+Ko-fi takes the payment; this Worker turns it into a licence key. No accounts,
+no payment code of our own.
 
-1. Create a Lemon Squeezy store and a **subscription** product at $10/month.
-2. On the product, enable **licence keys** (one key per subscription).
-3. Copy your store id and product id into `wrangler.toml`
-   (`LEMONSQUEEZY_STORE_ID`, `LEMONSQUEEZY_PRODUCT_ID`) so keys minted by other
-   LS stores are rejected, then `npx wrangler deploy`.
-4. Point the landing page's **Get Pro** button at your LS checkout URL.
+### Wire up the webhook
 
-Flow: customer subscribes → LS emails them a licence key → they paste it into
-Virex's Settings → the Worker validates it against LS and caches the verdict.
-Cancelling or refunding deactivates the key at LS; the Worker picks that up
-within 12 hours (the positive-cache TTL).
+1. Create a **$10/month membership tier** on Ko-fi.
+2. Ko-fi → **Settings → Webhooks**: set the URL to
+   `https://virex-api.<subdomain>.workers.dev/webhooks/kofi` and copy the
+   **Verification Token**.
+3. Store it, plus a token guarding the admin endpoint:
 
-### Comping someone / overriding
+   ```bash
+   npx wrangler secret put KOFI_VERIFICATION_TOKEN
+   npx wrangler secret put ADMIN_TOKEN
+   npx wrangler deploy
+   ```
 
-Manually issued keys bypass Lemon Squeezy entirely:
+Every payment now hits the Worker. Payments of `PRO_MIN_AMOUNT` or more issue a
+key (renewals reuse the same one); smaller amounts are treated as tips and
+ignored.
+
+### Getting the key to the customer
+
+**By hand (no setup).** Ko-fi emails you about each payment. Look up the key:
+
+```bash
+curl -H "X-Admin-Token: $ADMIN_TOKEN" \
+  "https://virex-api.<subdomain>.workers.dev/admin/license?email=buyer@example.com"
+```
+
+Then reply to them with it. Fine for the first handful of customers.
+
+**Automatically.** Add a [Resend](https://resend.com) account (free tier), verify
+a sending domain, then:
+
+```bash
+npx wrangler secret put RESEND_API_KEY
+# and set LICENSE_FROM_EMAIL in wrangler.toml, e.g. "Virex <keys@yourdomain.com>"
+```
+
+The Worker then emails the key the moment someone subscribes. Note Resend needs
+a **domain you own** — it can't send from `.vercel.app`.
+
+### How cancellation works
+
+Licences carry a 35-day TTL that each monthly payment refreshes. Stop paying and
+the key simply lapses, so no "subscription cancelled" event is required — Ko-fi
+doesn't reliably send one.
+
+### Comping someone
 
 ```bash
 npx wrangler kv key put --binding VIREX_KV "license:VIREX-FRIEND-01" "active" --remote
 ```
 
-Revoke by deleting that key. To force an immediate re-check of an LS key
-(e.g. after a refund), delete its cached verdict:
-
-```bash
-npx wrangler kv key delete --binding VIREX_KV "pro:<their-key>" --remote
-```
+Revoke by deleting that key (add `--remote`).
 
 ## Cost
 
