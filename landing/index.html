@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Virex — Rewrite anything, right where you type</title>
-<meta name="description" content="Virex is a tiny macOS menu-bar app. Select any text, press ⌘⇧1, and get a clean, natural rewrite you can drop in with one keystroke — in any app. Free, open source, bring your own key." />
-<meta property="og:title" content="Virex — Rewrite anything, right where you type" />
-<meta property="og:description" content="A macOS menu-bar writing assistant. Select text, hit a hotkey, replace it with a cleaner version. Free & open source." />
+<title>Virex — Reply to clients like a native speaker</title>
+<meta name="description" content="A tiny macOS menu-bar app for freelancers. Select the message you typed, press ⌘⇧1, and Virex rewrites it into clear, professional English — inside WhatsApp, Telegram, Slack, or email. Free, open source, bring your own key." />
+<meta property="og:title" content="Virex — Reply to clients like a native speaker" />
+<meta property="og:description" content="Freelancers: stop rewriting the same message five times. Select it, hit a hotkey, send it. Works in WhatsApp, Telegram, Slack, and email. Free & open source." />
 <meta property="og:type" content="website" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -137,6 +137,7 @@
   /* ---- demo (signature) ---- */
   .demo-stage { margin: 56px auto 0; max-width: 720px; position: relative; }
   .os-window {
+    text-align: left; /* the hero centres text; the mock window must not inherit that */
     background: linear-gradient(180deg, #12151d, #0d1017);
     border: 1px solid var(--line); border-radius: 18px;
     box-shadow: var(--shadow); overflow: hidden;
@@ -144,8 +145,32 @@
   .os-bar { display: flex; align-items: center; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
   .os-dot { width: 11px; height: 11px; border-radius: 50%; }
   .os-dot.r { background: #ff5f57; } .os-dot.y { background: #febc2e; } .os-dot.g { background: #28c840; }
-  .os-title { margin-left: 8px; color: var(--faint); font-size: 0.8rem; font-family: var(--font-mono); }
-  .os-body { padding: 30px 26px 34px; min-height: 190px; position: relative; }
+  .os-title { margin-left: 8px; color: var(--muted); font-size: 0.8rem; font-family: var(--font-mono); display: inline-flex; align-items: center; gap: 7px; transition: color .3s; }
+  .os-title .appdot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); transition: background .3s; }
+
+  /* app strip */
+  .apps { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 26px; }
+  .app-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.88rem; font-weight: 500; color: var(--muted);
+    background: var(--glass); border: 1px solid var(--line);
+    padding: 8px 14px; border-radius: 100px;
+  }
+  .app-chip i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+  /* Tall enough that the floating overlay never clips against the window edge. */
+  .os-body {
+    padding: 30px 26px 34px; min-height: 340px; position: relative;
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  /* On narrow screens the draft and the rewrite both wrap unpredictably, so a
+     fixed offset can't keep the overlay clear of the composer. Drop it into
+     normal flow instead and let flexbox stack it. */
+  @media (max-width: 620px) {
+    .os-body { min-height: 0; }
+    /* `.os-body .overlay` (not `.overlay`) so this beats the base rule's
+       `position: absolute`, which is declared later in the sheet. */
+    .os-body .overlay { position: static; order: -1; margin-bottom: 14px; }
+  }
 
   .msg-label { color: var(--faint); font-size: 0.78rem; margin-bottom: 12px; font-family: var(--font-mono); }
   .composer {
@@ -169,7 +194,7 @@
 
   /* the floating Virex overlay, anchored above the text */
   .overlay {
-    position: absolute; left: 26px; right: 26px; bottom: 96px;
+    position: absolute; left: 26px; right: 26px; bottom: 134px;
     background: rgba(20,23,32,0.86);
     backdrop-filter: blur(20px);
     border: 1px solid var(--line-2); border-radius: 16px;
@@ -190,7 +215,9 @@
   .pill { font-size: 0.78rem; font-weight: 600; padding: 6px 11px; border-radius: 9px; }
   .pill.rep { background: var(--accent); color: #0a0c12; display: inline-flex; align-items: center; gap: 6px; }
   .pill.rep.hot { box-shadow: 0 0 0 3px rgba(91,140,255,0.3); }
-  .pill.sub { color: var(--muted); }
+  /* NB: not `.pill.sub` — that would collide with the hero's `.sub` rule,
+     whose `margin: 24px auto 0` spreads these apart inside the flex row. */
+  .pill.quiet { color: var(--muted); }
   .pill kbd { padding: 3px 5px; }
 
   /* ---- section scaffolding ---- */
@@ -280,9 +307,9 @@
 <main id="top">
   <!-- HERO -->
   <div class="hero wrap">
-    <div class="eyebrow"><span class="dot"></span> macOS menu-bar app · free &amp; open source</div>
-    <h1 class="title">Rewrite anything, <span class="grad">right where you type.</span></h1>
-    <p class="sub">Virex lives in your menu bar. Select any text, press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>1</kbd>, and get a clean, natural rewrite you can drop in with one keystroke — in any app.</p>
+    <div class="eyebrow"><span class="dot"></span> Built for freelancers · free &amp; open source</div>
+    <h1 class="title">Reply to clients <span class="grad">like a native speaker.</span></h1>
+    <p class="sub">Stop rewriting the same message five times. Select what you typed, press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>1</kbd>, and Virex turns it into clear, professional English — right inside WhatsApp, Telegram, Slack, or email.</p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/phcodesage/Virex/releases/latest">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
@@ -300,10 +327,10 @@
       <div class="os-window" aria-hidden="true">
         <div class="os-bar">
           <span class="os-dot r"></span><span class="os-dot y"></span><span class="os-dot g"></span>
-          <span class="os-title">Messages</span>
+          <span class="os-title"><i class="appdot" id="appDot"></i><span id="appName">WhatsApp</span></span>
         </div>
         <div class="os-body">
-          <div class="msg-label">Draft reply</div>
+          <div class="msg-label" id="msgLabel">Your draft to a client</div>
 
           <!-- floating overlay -->
           <div class="overlay" id="ov">
@@ -311,16 +338,27 @@
             <div class="ov-text"><span id="ovText"></span><span class="type-caret" id="ovCaret"></span></div>
             <div class="ov-actions">
               <span class="pill rep" id="repPill">Replace <kbd>↵</kbd></span>
-              <span class="pill sub">Copy</span>
-              <span class="pill sub">Retry</span>
+              <span class="pill quiet">Copy</span>
+              <span class="pill quiet">Retry</span>
             </div>
           </div>
 
           <div class="composer">
             <span class="plus">＋</span>
-            <span class="draft messy" id="draft"><span class="sel" id="draftSel">can you come here yesterday tommorw?</span></span>
+            <span class="draft messy" id="draft"><span class="sel" id="draftSel">hi sir i finish the design already, u can check it now?</span></span>
           </div>
         </div>
+      </div>
+
+      <div class="apps">
+        <span class="app-chip"><i style="background:#25D366"></i>WhatsApp</span>
+        <span class="app-chip"><i style="background:#29A9EB"></i>Telegram</span>
+        <span class="app-chip"><i style="background:#E01E5A"></i>Slack</span>
+        <span class="app-chip"><i style="background:#EA4335"></i>Gmail</span>
+        <span class="app-chip"><i style="background:#5865F2"></i>Discord</span>
+        <span class="app-chip"><i style="background:#6FDA44"></i>Upwork</span>
+        <span class="app-chip"><i style="background:#0A66C2"></i>LinkedIn</span>
+        <span class="app-chip"><i style="background:#9aa3b6"></i>…and any other app</span>
       </div>
     </div>
   </div>
@@ -328,53 +366,54 @@
   <!-- HOW IT WORKS -->
   <section id="how" class="wrap">
     <div class="sec-eyebrow">Three keystrokes, start to finish</div>
-    <h2 class="sec-title">Fix a sentence without leaving the app you're in.</h2>
+    <h2 class="sec-title">Send the reply without leaving the chat.</h2>
+    <p class="sec-lead">No tab-switching to ChatGPT, no copy-paste round trip, no losing your place mid-conversation.</p>
     <div class="steps">
       <div class="step">
         <div class="idx">Step 1</div>
         <div class="keys"><span>Select your text</span></div>
         <h3>Highlight it</h3>
-        <p>Anywhere you can select text — a chat box, an email, a code comment.</p>
+        <p>The message you just typed to a client — in a chat box, an email, a proposal.</p>
       </div>
       <div class="step">
         <div class="idx">Step 2</div>
         <div class="keys"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>1</kbd></div>
         <h3>Press the hotkey</h3>
-        <p>Virex pops up right above your selection and rewrites it as you watch.</p>
+        <p>Virex pops up right above your text and rewrites it as you watch.</p>
       </div>
       <div class="step">
         <div class="idx">Step 3</div>
         <div class="keys"><kbd>↵</kbd> <span style="color:var(--muted);font-size:.95rem">Enter</span></div>
-        <h3>Replace it</h3>
-        <p>Hit Enter and the cleaned-up text drops straight back in. Done.</p>
+        <h3>Send it</h3>
+        <p>Hit Enter and the polished version drops straight back in. Ship the reply.</p>
       </div>
     </div>
   </section>
 
   <!-- FEATURES -->
   <section id="features" class="wrap">
-    <div class="sec-eyebrow">What you get</div>
-    <h2 class="sec-title">Small app. Fixes your writing everywhere.</h2>
+    <div class="sec-eyebrow">Why freelancers keep it running</div>
+    <h2 class="sec-title">Every client message, sharper — in seconds.</h2>
     <div class="features">
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg></div>
-        <h3>Works everywhere</h3>
-        <p>Any app that takes text — Mail, WhatsApp, Notes, Slack, your browser.</p>
+        <h3>Where your clients are</h3>
+        <p>WhatsApp, Telegram, Slack, Gmail, Discord, Upwork — any app that takes text.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
-        <h3>Fixes and rephrases</h3>
-        <p>Grammar, spelling, and awkward wording — rewritten to read naturally.</p>
+        <h3>Sound fluent, every time</h3>
+        <p>Built for non-native English speakers. Grammar, spelling, and awkward phrasing rewritten to read like a native.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div>
-        <h3>Your key, your data</h3>
-        <p>Text goes straight to your own API key. There's no Virex server in the middle.</p>
+        <h3>Client work stays private</h3>
+        <p>Messages go straight to your own API key. No Virex server in the middle, nothing stored.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg></div>
-        <h3>Feather-light</h3>
-        <p>A tiny native menu-bar app built in Rust — not a bloated Electron suite.</p>
+        <h3>Faster than a browser tab</h3>
+        <p>No switching to ChatGPT and back. A tiny native app in Rust, not a bloated Electron suite.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="M8 21h8"/></svg></div>
@@ -395,7 +434,7 @@
       <div>
         <div class="sec-eyebrow">Bring your own key</div>
         <h2 class="sec-title">No subscription. You pay only for what you use.</h2>
-        <p class="sec-lead">Virex uses your personal DeepSeek API key, so your writing never passes through anyone else's servers — and there's nothing to subscribe to.</p>
+        <p class="sec-lead">One less monthly bill on top of your tools. Virex uses your own DeepSeek API key, so client conversations never pass through anyone else's servers — and there's nothing to cancel.</p>
         <ol class="keysteps">
           <li><b>Get a DeepSeek API key</b> <span>— sign up at platform.deepseek.com and create a key.</span></li>
           <li><b>Open Virex Settings</b> <span>— from the menu-bar icon.</span></li>
@@ -404,7 +443,7 @@
       </div>
       <div class="note-card">
         <div class="big">~<span>a fraction of a cent</span></div>
-        <p>Typical cost of a single rewrite on DeepSeek. Most people spend less than a coffee a month — and it's billed to your own account, not ours.</p>
+        <p>Typical cost of one rewrite on DeepSeek. Even at a hundred client messages a day, most freelancers spend less than a coffee a month — billed to your own account, not ours.</p>
       </div>
     </div>
   </section>
@@ -453,14 +492,29 @@
     var ovText = document.getElementById("ovText");
     var ovCaret= document.getElementById("ovCaret");
     var rep    = document.getElementById("repPill");
+    var appName= document.getElementById("appName");
+    var appDot = document.getElementById("appDot");
 
-    var MESSY = "can you come here yesterday tommorw?";
-    var FIXED = "Can you come here tomorrow?";
+    // Real freelancer moments, in the apps clients actually message you in.
+    var SCENES = [
+      { app: "WhatsApp", color: "#25D366",
+        messy: "hi sir i finish the design already, u can check it now?",
+        fixed: "Hi! I've finished the design — it's ready for you to review." },
+      { app: "Telegram", color: "#29A9EB",
+        messy: "sorry for late reply i was busy, i can deliver tomorow morning",
+        fixed: "Sorry for the slow reply — I was tied up. I can deliver tomorrow morning." },
+      { app: "Slack", color: "#E01E5A",
+        messy: "the price is 250$ , if you want more revision we can discuss",
+        fixed: "The price is $250. If you'd like additional revisions, we can discuss it." }
+    ];
+    var scene = 0;
 
     if (reduce) {
+      var s = SCENES[0];
+      appName.textContent = s.app; appDot.style.background = s.color;
       ov.classList.add("show");
-      ovText.textContent = FIXED;
-      sel.textContent = FIXED;
+      ovText.textContent = s.fixed;
+      sel.textContent = s.fixed;
       draft.classList.remove("messy"); draft.classList.add("fixed");
       return;
     }
@@ -469,9 +523,14 @@
     function at(ms, fn){ t.push(setTimeout(fn, ms)); }
 
     function run() {
-      // reset
+      var s = SCENES[scene];
+      var FIXED = s.fixed;
+
+      // reset to this scene's app + messy draft
+      appName.textContent = s.app;
+      appDot.style.background = s.color;
       draft.classList.add("messy"); draft.classList.remove("fixed");
-      sel.textContent = MESSY;
+      sel.textContent = s.messy;
       ovText.textContent = "";
       ov.classList.remove("show");
       rep.classList.remove("hot");
@@ -481,7 +540,7 @@
       at(900, function(){ ov.classList.add("show"); });
 
       // stream the corrected text
-      var start = 1350, per = 42;
+      var start = 1350, per = 30;
       for (var i = 1; i <= FIXED.length; i++) {
         (function(n){ at(start + n*per, function(){ ovText.textContent = FIXED.slice(0, n); }); })(i);
       }
@@ -493,10 +552,14 @@
         draft.classList.remove("messy"); draft.classList.add("fixed");
         sel.textContent = FIXED;
       });
-      at(doneTyping + 1350, function(){ ov.classList.remove("show"); });
+      at(doneTyping + 1500, function(){ ov.classList.remove("show"); });
 
-      // loop
-      at(doneTyping + 3400, function(){ t.forEach(clearTimeout); t = []; run(); });
+      // next app / next message
+      at(doneTyping + 3600, function(){
+        t.forEach(clearTimeout); t = [];
+        scene = (scene + 1) % SCENES.length;
+        run();
+      });
     }
     run();
   })();
