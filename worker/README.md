@@ -108,6 +108,18 @@ npx wrangler kv key put --binding VIREX_KV "license:VIREX-FRIEND-01" "active" --
 
 Revoke by deleting that key (add `--remote`).
 
+> Writes and deletes take up to a minute to take effect — KV caches reads at the
+> edge. Measured ~20s in practice. So a revoked key keeps working briefly; that's
+> expected, not a bug.
+
+## Deployed instance
+
+`https://virex-api.rechceltoledo.workers.dev` — the URL compiled into the app as
+`DEFAULT_API_BASE` (`src-tauri/src/config.rs`). Redeploy with `npx wrangler deploy`.
+
+Secrets in place: `DEEPSEEK_API_KEY`, `KOFI_VERIFICATION_TOKEN`, `ADMIN_TOKEN`
+(the admin token is kept locally in the gitignored `worker/.secrets.local`).
+
 ## Cost
 
 Workers' free tier covers 100k requests/day and permits commercial use.
