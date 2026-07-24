@@ -84,6 +84,9 @@ export default {
       if (url.pathname === "/stats.json" && request.method === "GET") {
         return cors(await handleStatsJson(env));
       }
+      if (url.pathname.startsWith("/updates/") && request.method === "GET") {
+        return cors(await handleUpdateManifest(env, url));
+      }
       if (url.pathname === "/") {
         return cors(json({ ok: true, service: "virex-api" }));
       }
@@ -290,6 +293,84 @@ async function handleRewrite(request: Request, env: Env): Promise<Response> {
       "X-Virex-Remaining": plan.pro ? "unlimited" : String(Math.max(0, plan.remaining - 1)),
     },
   });
+}
+
+/* ------------------------------------------------------- update manifest */
+
+const GITHUB_REPO = "phcodesage/Virex";
+/** Cache the manifest briefly so a release burst doesn't hammer GitHub's API. */
+const UPDATE_CACHE_TTL = 300;
+
+interface GithubAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+/**
+ * Serve the update manifest `tauri-plugin-updater` expects, built on the fly
+ * from the latest GitHub release.
+ *
+ * Deriving it from GitHub means publishing a release *is* publishing the
+ * update — there's no separate manifest to remember to bump.
+ *
+ * The app requests /updates/{target}/{arch}/{current_version}; a 204 means
+ * "nothing newer", which is how the plugin expects to be told it's current.
+ */
+async function handleUpdateManifest(env: Env, url: URL): Promise<Response> {
+  const current = url.pathname.split("/").filter(Boolean)[3] ?? "0.0.0";
+
+  const cached = await env.VIREX_KV.get("update:latest");
+  let release: { tag_name?: string; body?: string; published_at?: string; assets?: GithubAsset[] };
+  if (cached) {
+    release = JSON.parse(cached);
+  } else {
+    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "Virex-Updater" },
+    });
+    if (!resp.ok) return json({ error: "github_unavailable", status: resp.status }, 502);
+    release = await resp.json();
+    await env.VIREX_KV.put("update:latest", JSON.stringify(release), {
+      expirationTtl: UPDATE_CACHE_TTL,
+    });
+  }
+
+  const version = (release.tag_name ?? "").replace(/^v/, "");
+  if (!version) return json({ error: "no_release" }, 404);
+
+  // Nothing newer than what the caller is running.
+  if (compareVersions(version, current) <= 0) return new Response(null, { status: 204 });
+
+  const assets = release.assets ?? [];
+  const bundle = assets.find((a) => a.name.endsWith(".app.tar.gz"));
+  const sigAsset = assets.find((a) => a.name.endsWith(".app.tar.gz.sig"));
+  if (!bundle || !sigAsset) {
+    return json({ error: "release_missing_updater_artifacts", version }, 404);
+  }
+
+  // The manifest embeds the signature itself, so fetch the .sig contents.
+  const sigResp = await fetch(sigAsset.browser_download_url, {
+    headers: { "User-Agent": "Virex-Updater" },
+  });
+  if (!sigResp.ok) return json({ error: "signature_unavailable" }, 502);
+  const signature = (await sigResp.text()).trim();
+
+  return json({
+    version,
+    notes: (release.body ?? "").slice(0, 2000),
+    pub_date: release.published_at ?? new Date().toISOString(),
+    url: bundle.browser_download_url,
+    signature,
+  });
+}
+
+/** Numeric semver comparison; returns >0 when `a` is newer than `b`. */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  }
+  return 0;
 }
 
 /* -------------------------------------------------------- site analytics */

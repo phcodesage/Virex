@@ -26,7 +26,10 @@ pub fn build(app: &AppHandle) -> Result<()> {
         &[&open, &sep1, &pause, &resume, &sep2, &updates, &quit],
     )?;
 
-    let icon = Image::from_bytes(include_bytes!("../icons/128x128.png"))?;
+    // A dedicated template icon: transparent apart from the V glyph. macOS
+    // template rendering keys off the alpha channel, so the full-bleed app icon
+    // (95% opaque) came out as a solid block in the menu bar.
+    let icon = Image::from_bytes(include_bytes!("../icons/tray.png"))?;
 
     TrayIconBuilder::with_id("virex-tray")
         .icon(icon)

@@ -1,35 +1,27 @@
-//! "Check for Updates…": compares the running version against the latest
-//! GitHub Release and, if newer, offers to open the download page.
+//! "Check for Updates…" — downloads and installs in place.
+//!
+//! Backed by `tauri-plugin-updater`, which verifies each update against the
+//! public key baked into `tauri.conf.json` before installing, so a tampered or
+//! third-party build can't be pushed to users.
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_updater::UpdaterExt;
 
-use crate::config::GITHUB_REPO;
-
-/// Check GitHub Releases for a newer version and report the result in a dialog.
-/// Runs the network request off the UI thread.
+/// Check for a newer release and, with the user's consent, install it.
 pub fn check(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let current = app.package_info().version.clone();
-        match latest_release().await {
-            Ok((latest, page_url)) if latest > current => {
-                app.dialog()
-                    .message(format!(
-                        "Virex {latest} is available — you're on {current}."
-                    ))
-                    .title("Update available")
-                    .buttons(MessageDialogButtons::OkCancelCustom(
-                        "Download".into(),
-                        "Later".into(),
-                    ))
-                    .show(move |download| {
-                        if download {
-                            open_url(&page_url);
-                        }
-                    });
-            }
-            Ok((_latest, _)) => {
+        let current = app.package_info().version.to_string();
+
+        let updater = match app.updater() {
+            Ok(u) => u,
+            Err(e) => return report_error(&app, format!("Couldn't start the updater.\n\n{e}")),
+        };
+
+        match updater.check().await {
+            Ok(Some(update)) => prompt_and_install(app, update, current).await,
+            Ok(None) => {
                 app.dialog()
                     .message(format!("You're on the latest version ({current})."))
                     .title("Virex is up to date")
@@ -38,58 +30,63 @@ pub fn check(app: &AppHandle) {
             }
             Err(e) => {
                 log::warn!("update check failed: {e}");
-                app.dialog()
-                    .message(format!("Couldn't check for updates.\n\n{e}"))
-                    .title("Update check failed")
-                    .kind(MessageDialogKind::Error)
-                    .show(|_| {});
+                report_error(&app, format!("Couldn't check for updates.\n\n{e}"));
             }
         }
     });
 }
 
-/// Fetch the latest release's version (from its `vX.Y.Z` tag) and web page URL.
-async fn latest_release() -> anyhow::Result<(semver::Version, String)> {
-    if GITHUB_REPO.starts_with("OWNER/") {
-        anyhow::bail!("No update repository is configured yet.");
+async fn prompt_and_install(app: AppHandle, update: tauri_plugin_updater::Update, current: String) {
+    let version = update.version.clone();
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .message(format!(
+            "Virex {version} is available — you're on {current}.\n\nDownload and install it now?"
+        ))
+        .title("Update available")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Install".into(),
+            "Later".into(),
+        ))
+        .show(move |install| {
+            let _ = tx.send(install);
+        });
+
+    if !matches!(rx.await, Ok(true)) {
+        return;
     }
 
-    let url = format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent("Virex-Updater")
-        .build()?;
-
-    let resp = client
-        .get(&url)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        anyhow::bail!("GitHub returned {}", resp.status());
+    log::info!("downloading update {version}");
+    match update.download_and_install(|_, _| {}, || {}).await {
+        Ok(()) => {
+            let app_for_restart = app.clone();
+            app.dialog()
+                .message(format!(
+                    "Virex {version} is installed. Restart now to use it?"
+                ))
+                .title("Update installed")
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    "Restart".into(),
+                    "Later".into(),
+                ))
+                .show(move |restart| {
+                    if restart {
+                        app_for_restart.restart();
+                    }
+                });
+        }
+        Err(e) => {
+            log::warn!("update install failed: {e}");
+            report_error(&app, format!("The update couldn't be installed.\n\n{e}"));
+        }
     }
-
-    let json: serde_json::Value = resp.json().await?;
-    let tag = json
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("release had no tag_name"))?;
-    let version = semver::Version::parse(tag.trim_start_matches('v'))?;
-    let page = json
-        .get("html_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-
-    Ok((version, page))
 }
 
-/// Open a URL in the user's default browser.
-#[cfg(target_os = "macos")]
-fn open_url(url: &str) {
-    let _ = std::process::Command::new("open").arg(url).spawn();
+fn report_error(app: &AppHandle, message: String) {
+    app.dialog()
+        .message(message)
+        .title("Update failed")
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
 }
-
-#[cfg(not(target_os = "macos"))]
-fn open_url(_url: &str) {}

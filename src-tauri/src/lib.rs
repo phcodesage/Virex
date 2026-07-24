@@ -42,6 +42,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(logging::plugin())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
@@ -96,10 +97,14 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Virex")
         .run(|_app, event| {
-            // Keep running in the background even when all windows are closed;
-            // the app lives in the menu bar.
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                // `code` is None when the last window merely closed — the app
+                // lives in the menu bar, so keep running. It's Some(_) when
+                // something deliberately asked us to quit (the tray's Quit
+                // item), and blocking that made Quit do nothing at all.
+                if code.is_none() {
+                    api.prevent_exit();
+                }
             }
         });
 }
