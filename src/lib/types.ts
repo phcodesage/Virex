@@ -19,14 +19,6 @@ export interface Settings {
   paraphraseTranslation: boolean;
 }
 
-export interface TranslationResult {
-  success: boolean;
-  translation: string;
-  rawTranslation: string;
-  detectedLanguage: string;
-  targetLanguage: string;
-}
-
 // Streaming events emitted by the backend to the overlay window.
 export type StreamEvent =
   | { kind: "start"; original: string }

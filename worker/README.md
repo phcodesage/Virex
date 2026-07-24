@@ -6,7 +6,7 @@ key never ships inside a binary anyone can inspect.
 
 | Plan | Limit |
 |---|---|
-| Free | 10 rewrites/day per device |
+| Free | 20 rewrites/day per device |
 | Pro | Unlimited |
 
 ## Deploy

@@ -24,7 +24,6 @@ mod selection;
 mod settings;
 mod state;
 mod tray;
-mod translator;
 mod updater;
 mod window;
 
@@ -65,8 +64,6 @@ pub fn run() {
             commands::replace_selection,
             commands::copy_to_clipboard,
             commands::close_overlay,
-            commands::translate_message,
-            commands::translate_selection,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

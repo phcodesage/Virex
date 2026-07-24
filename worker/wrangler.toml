@@ -4,7 +4,7 @@ compatibility_date = "2026-07-01"
 
 # Daily free-tier allowance. Pro licences bypass this entirely.
 [vars]
-FREE_DAILY_LIMIT = "10"
+FREE_DAILY_LIMIT = "20"
 # Payments at or above this (in your Ko-fi currency) grant Pro; anything less is
 # treated as a tip.
 PRO_MIN_AMOUNT = "10"

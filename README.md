@@ -42,7 +42,7 @@ detects the moment you grant it. There's no API key to create and no account.
 
 | | |
 |---|---|
-| **Free** | 10 rewrites per day, resets daily |
+| **Free** | 20 rewrites per day, resets daily |
 | **Pro** | Unlimited — $10/month on [Ko-fi](https://ko-fi.com/phcodesage) |
 
 Pro arrives as a licence key by email; paste it into Settings → *I have a key*.
