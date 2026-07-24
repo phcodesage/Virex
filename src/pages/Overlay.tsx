@@ -44,11 +44,13 @@ export const Overlay: Component = () => {
   const doCopy = () => void api.copyToClipboard(text());
   const doRetry = () => void api.retry();
   const doTranslate = () => void api.translateSelection();
-  const doReplyNative = () => void api.replyNativeSelection();
   const doClose = () => void api.closeOverlay();
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      doClose();
+    } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       doReplace();
     }
@@ -110,7 +112,6 @@ export const Overlay: Component = () => {
               },
               { label: "Copy", onClick: doCopy, disabled: !text() },
               { label: "Translate", onClick: doTranslate },
-              { label: "Reply Native", onClick: doReplyNative },
               { label: "Retry", onClick: doRetry },
             ]}
           />
@@ -118,7 +119,7 @@ export const Overlay: Component = () => {
             onClick={doClose}
             class="rounded-lg px-2 py-1.5 text-[13px] text-black/40 hover:bg-black/5 dark:text-white/40 dark:hover:bg-white/10"
           >
-            Close
+            Esc
           </button>
         </div>
       </div>
