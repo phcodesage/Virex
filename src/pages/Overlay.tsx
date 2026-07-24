@@ -92,14 +92,14 @@ export const Overlay: Component = () => {
   });
 
   return (
-    <div class="animate-pop-in p-1.5">
-      <div class="vx-card rounded-2xl p-3">
-        <div class="mb-2 flex items-center gap-2 px-0.5">
-          <div class="h-2 w-2 rounded-full bg-blue-500" />
-          <span class="text-[11px] font-semibold uppercase tracking-wide text-black/40 dark:text-white/40">
+    <div data-tauri-drag-region class="animate-pop-in p-1.5">
+      <div data-tauri-drag-region class="vx-card rounded-2xl p-3">
+        <div data-tauri-drag-region class="mb-2 flex items-center gap-2 px-0.5 cursor-grab active:cursor-grabbing select-none">
+          <div data-tauri-drag-region class="h-2 w-2 rounded-full bg-blue-500" />
+          <span data-tauri-drag-region class="text-[11px] font-semibold uppercase tracking-wide text-black/40 dark:text-white/40">
             Virex
           </span>
-          <div class="flex-1" />
+          <div data-tauri-drag-region class="flex-1" />
           <div class="flex items-center gap-1.5">
             <span class="text-[11px] text-black/40 dark:text-white/40">Translate to:</span>
             <select

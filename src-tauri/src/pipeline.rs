@@ -42,6 +42,12 @@ pub fn trigger(app: AppHandle) {
         return;
     }
 
+    // Show overlay IMMEDIATELY so appearance and focus are instant (<1ms).
+    if let Err(e) = overlay::show(&app) {
+        log::error!("failed to show overlay: {e}");
+        return;
+    }
+
     // Capture the current selection while the source app is still frontmost.
     let selected = match selection::capture_selection() {
         Ok(text) => {
@@ -60,11 +66,6 @@ pub fn trigger(app: AppHandle) {
     };
 
     state.set_last_selection(Some(selected.clone()));
-
-    if let Err(e) = overlay::show(&app) {
-        log::error!("failed to show overlay: {e}");
-        return;
-    }
 
     rewrite(app, selected);
 }
