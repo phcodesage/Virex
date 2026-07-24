@@ -9,6 +9,7 @@ mod axselect;
 mod commands;
 mod config;
 mod deepseek;
+mod device;
 mod events;
 mod frontmost;
 mod hotkeys;
@@ -54,9 +55,12 @@ pub fn run() {
             commands::save_settings,
             commands::has_api_key,
             commands::set_api_key,
+            commands::set_license,
+            commands::get_plan,
             commands::accessibility_trusted,
             commands::request_accessibility,
             commands::open_accessibility_settings,
+            commands::open_url,
             commands::retry_last,
             commands::replace_selection,
             commands::copy_to_clipboard,

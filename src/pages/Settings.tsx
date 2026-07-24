@@ -1,36 +1,47 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { type Component, createSignal, onCleanup, onMount, Show } from "solid-js";
 import * as api from "../lib/api";
+import type { PlanInfo } from "../lib/api";
+
+const UPGRADE_URL = "https://virex-eta.vercel.app/#pricing";
 
 /**
- * Setup window: the two things Virex needs to work — Accessibility permission
- * (to read and replace the selection) and a DeepSeek API key (bring your own).
- * Model, prompt, and other tuning live in the app defaults / settings.toml.
+ * Setup window. Virex needs one permission to work; everything else here is
+ * plan status. There's no API key to enter — the Virex API proxy holds it.
  */
 export const Settings: Component = () => {
   const [trusted, setTrusted] = createSignal(true);
   const [version, setVersion] = createSignal("");
-  const [apiKey, setApiKey] = createSignal("");
-  const [keyStored, setKeyStored] = createSignal(false);
-  const [savingKey, setSavingKey] = createSignal(false);
-  const [keyError, setKeyError] = createSignal("");
-  const [keySaved, setKeySaved] = createSignal(false);
+  const [plan, setPlan] = createSignal<PlanInfo>();
+  const [planError, setPlanError] = createSignal("");
+  const [license, setLicenseInput] = createSignal("");
+  const [savingLicense, setSavingLicense] = createSignal(false);
+  const [licenseError, setLicenseError] = createSignal("");
+  const [showLicense, setShowLicense] = createSignal(false);
   let poll: number | undefined;
 
-  const refresh = async () => {
+  const refreshAccess = async () => {
     const ok = await api.accessibilityTrusted();
     setTrusted(ok);
     return ok;
   };
 
-  // Fire the native macOS prompt (the system dialog), then keep polling so the
-  // UI flips to "granted" the instant the toggle is switched on — no manual
-  // refresh needed.
+  const refreshPlan = async () => {
+    try {
+      setPlan(await api.getPlan());
+      setPlanError("");
+    } catch (e) {
+      setPlanError(String(e));
+    }
+  };
+
+  // Fire the native macOS prompt, then poll so the UI flips to "granted" the
+  // instant the toggle is switched on.
   const requestAccess = async () => {
     await api.requestAccessibility();
     if (poll === undefined) {
       poll = window.setInterval(async () => {
-        if (await refresh()) {
+        if (await refreshAccess()) {
           window.clearInterval(poll);
           poll = undefined;
         }
@@ -38,35 +49,39 @@ export const Settings: Component = () => {
     }
   };
 
-  const saveKey = async () => {
-    const key = apiKey().trim();
-    if (!key) return;
-    setSavingKey(true);
-    setKeyError("");
+  const saveLicense = async () => {
+    setSavingLicense(true);
+    setLicenseError("");
     try {
-      await api.setApiKey(key);
-      setApiKey("");
-      setKeyStored(true);
-      setKeySaved(true);
-      setTimeout(() => setKeySaved(false), 2000);
+      const result = await api.setLicense(license().trim());
+      setPlan(result);
+      if (result.plan === "pro") {
+        setLicenseInput("");
+        setShowLicense(false);
+      } else if (license().trim()) {
+        setLicenseError("That key isn't active. Check it and try again.");
+      }
     } catch (e) {
-      setKeyError(String(e));
+      setLicenseError(String(e));
     } finally {
-      setSavingKey(false);
+      setSavingLicense(false);
     }
   };
 
   onMount(async () => {
     getVersion().then(setVersion).catch(() => {});
-    setKeyStored(await api.hasApiKey());
-    const ok = await refresh();
-    // Ask straight away on open if we're not trusted yet.
+    void refreshPlan();
+    const ok = await refreshAccess();
     if (!ok) void requestAccess();
   });
 
   onCleanup(() => {
     if (poll !== undefined) window.clearInterval(poll);
   });
+
+  const used = () => plan()?.used ?? 0;
+  const limit = () => plan()?.limit ?? 0;
+  const pct = () => (limit() ? Math.min(100, (used() / limit()) * 100) : 0);
 
   return (
     <div class="mx-auto max-w-md space-y-5 p-8 text-black/90 dark:text-white/90">
@@ -85,7 +100,7 @@ export const Settings: Component = () => {
         </div>
       </header>
 
-      {/* 1 — Accessibility permission */}
+      {/* Accessibility permission — the only thing required to work */}
       <Show
         when={!trusted()}
         fallback={
@@ -94,7 +109,7 @@ export const Settings: Component = () => {
               Accessibility granted ✓
             </p>
             <p class="mt-1 opacity-70">
-              Virex can read and replace your selected text.
+              Select text anywhere and press your shortcut.
             </p>
           </div>
         }
@@ -130,52 +145,90 @@ export const Settings: Component = () => {
         </div>
       </Show>
 
-      {/* 2 — DeepSeek API key */}
-      <div class="space-y-2">
-        <div class="flex items-baseline justify-between">
-          <label class="text-sm font-medium">DeepSeek API Key</label>
-          <Show when={keyStored()}>
-            <span class="text-xs text-green-600 dark:text-green-400">Saved ✓</span>
-          </Show>
-        </div>
-        <input
-          type="password"
-          value={apiKey()}
-          onInput={(e) => setApiKey(e.currentTarget.value)}
-          onKeyDown={(e) => e.key === "Enter" && saveKey()}
-          placeholder={keyStored() ? "•••••••••• (stored in Keychain)" : "sk-…"}
-          class="vx-input"
-          autocomplete="off"
-          spellcheck={false}
-        />
-        <div class="flex items-center gap-2">
-          <button
-            onClick={saveKey}
-            disabled={!apiKey().trim() || savingKey()}
-            class="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+      {/* Plan + usage */}
+      <div class="rounded-xl border border-black/10 p-4 dark:border-white/15">
+        <Show
+          when={plan()}
+          fallback={
+            <p class="text-sm opacity-50">
+              {planError() ? "Couldn't reach the Virex service." : "Checking your plan…"}
+            </p>
+          }
+        >
+          <Show
+            when={plan()!.plan === "pro"}
+            fallback={
+              <>
+                <div class="flex items-baseline justify-between">
+                  <span class="text-sm font-medium">Free plan</span>
+                  <span class="text-xs opacity-60">
+                    {used()} of {limit()} today
+                  </span>
+                </div>
+                <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+                  <div
+                    class="h-full rounded-full bg-blue-500 transition-[width]"
+                    style={{ width: `${pct()}%` }}
+                  />
+                </div>
+                <p class="mt-2 text-xs opacity-50">
+                  {plan()!.remaining === 0
+                    ? "You've used today's rewrites. They reset tomorrow."
+                    : `${plan()!.remaining} rewrites left today. Resets daily.`}
+                </p>
+                <div class="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => api.openUrl(UPGRADE_URL)}
+                    class="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
+                  >
+                    Upgrade to Pro
+                  </button>
+                  <button
+                    onClick={() => setShowLicense((v) => !v)}
+                    class="rounded-lg px-3 py-1.5 text-xs font-medium text-black/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10"
+                  >
+                    I have a key
+                  </button>
+                </div>
+              </>
+            }
           >
-            {savingKey() ? "Saving…" : keyStored() ? "Replace key" : "Save key"}
-          </button>
-          <Show when={keySaved()}>
-            <span class="text-xs text-green-500">Key saved to Keychain</span>
+            <div class="flex items-baseline justify-between">
+              <span class="text-sm font-medium text-blue-600 dark:text-blue-400">
+                Pro — unlimited ✓
+              </span>
+              <span class="text-xs opacity-60">{used()} today</span>
+            </div>
+            <p class="mt-1 text-xs opacity-50">Thanks for supporting Virex.</p>
           </Show>
-          <Show when={keyError()}>
-            <span class="text-xs text-red-500">{keyError()}</span>
-          </Show>
-        </div>
-        <p class="text-xs opacity-50">
-          Virex uses your own key, so your text goes straight to DeepSeek — never
-          through our servers. Create one at platform.deepseek.com, then paste it
-          here. It's stored in the macOS Keychain.
-          {keyStored() ? " Leave blank to keep the current key." : ""}
-        </p>
-      </div>
+        </Show>
 
-      <Show when={trusted() && keyStored()}>
-        <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs opacity-80">
-          You're all set — select text anywhere and press your shortcut.
-        </div>
-      </Show>
+        <Show when={showLicense() && plan()?.plan !== "pro"}>
+          <div class="mt-3 space-y-2 border-t border-black/5 pt-3 dark:border-white/10">
+            <input
+              value={license()}
+              onInput={(e) => setLicenseInput(e.currentTarget.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveLicense()}
+              placeholder="VIREX-XXXX-XXXX"
+              class="vx-input"
+              autocomplete="off"
+              spellcheck={false}
+            />
+            <div class="flex items-center gap-2">
+              <button
+                onClick={saveLicense}
+                disabled={!license().trim() || savingLicense()}
+                class="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {savingLicense() ? "Checking…" : "Activate"}
+              </button>
+              <Show when={licenseError()}>
+                <span class="text-xs text-red-500">{licenseError()}</span>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </div>
     </div>
   );
 };

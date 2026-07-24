@@ -93,17 +93,11 @@ fn rewrite(app: AppHandle, input: String) {
     }
     .emit(&app);
 
-    let api_key = match keychain::get_api_key() {
-        Some(k) => k,
-        None => {
-            StreamEvent::Error {
-                message: "No API key. Add your DeepSeek key in Settings.".into(),
-            }
-            .emit(&app);
-            crate::window::open_settings(&app);
-            return;
-        }
-    };
+    // No API key needed on the client any more — the proxy holds it. We only
+    // pass an anonymous device id (for the free-tier counter) and a Pro licence
+    // if the user has one.
+    let device_id = crate::device::id();
+    let license = keychain::get_license();
 
     let settings = app.state::<AppState>().settings();
 
@@ -111,9 +105,10 @@ fn rewrite(app: AppHandle, input: String) {
         let app_for_delta = app.clone();
         let result = deepseek::stream_rewrite(
             deepseek::RewriteRequest {
-                api_key: &api_key,
                 settings: &settings,
                 input: &input,
+                device_id: &device_id,
+                license: license.as_deref(),
             },
             |delta| {
                 StreamEvent::Delta {
@@ -151,13 +146,11 @@ pub fn translate(app: AppHandle, input: String, target_lang: Option<String>) {
     }
     .emit(&app);
 
-    let api_key = keychain::get_api_key().unwrap_or_default();
     let settings = app.state::<AppState>().settings();
 
     tauri::async_runtime::spawn(async move {
         let app_for_delta = app.clone();
         let result = crate::translator::translate_and_paraphrase(
-            &api_key,
             &settings,
             &input,
             &target_lang,

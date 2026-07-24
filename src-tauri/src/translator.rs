@@ -96,7 +96,6 @@ pub async fn google_translate(
 
 /// Translate text using Google Translate, then paraphrase with DeepSeek for clarity.
 pub async fn translate_and_paraphrase<F>(
-    api_key: &str,
     settings: &Settings,
     text: &str,
     target_lang: &str,
@@ -108,17 +107,19 @@ where
     // Step 1: Translate using free Google Translate API
     let (raw_translation, detected_lang) = google_translate(text, target_lang).await?;
 
-    // Step 2: Paraphrase using DeepSeek for clarity (if enabled and API key is available)
-    let paraphrased = if settings.paraphrase_translation && !api_key.trim().is_empty() {
+    // Step 2: Paraphrase via the Virex proxy for clarity (if enabled)
+    let license = crate::keychain::get_license();
+    let paraphrased = if settings.paraphrase_translation {
         let prompt = format!(
             "You are a professional translator and editor. Refine the following translated text for maximum clarity, natural phrasing, and 100% semantic fidelity in {target_lang}.\n\nStrict Rules:\n- Maintain absolute accuracy to the original meaning.\n- Do NOT alter proper nouns, technical terms, dates, numbers, or core facts.\n- Do NOT summarize or add extra commentary.\n- Return ONLY the final refined translation.\n\nText:\n{raw_translation}"
         );
 
         match deepseek::stream_rewrite(
             deepseek::RewriteRequest {
-                api_key,
                 settings,
                 input: &prompt,
+                device_id: &crate::device::id(),
+                license: license.as_deref(),
             },
             |delta| {
                 on_delta(delta);

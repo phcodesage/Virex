@@ -9,9 +9,16 @@ pub const APP_ID: &str = "com.virex.app";
 /// Releases must be tagged `vX.Y.Z` with the DMG attached.
 pub const GITHUB_REPO: &str = "phcodesage/Virex";
 
-/// Keychain service + account under which the DeepSeek API key is stored.
+/// Keychain service + accounts. The DeepSeek key no longer lives on the client
+/// (the API proxy holds it); we only store the user's Pro licence.
 pub const KEYCHAIN_SERVICE: &str = "com.virex.app";
 pub const KEYCHAIN_ACCOUNT: &str = "deepseek-api-key";
+pub const KEYCHAIN_LICENSE_ACCOUNT: &str = "virex-license";
+
+/// Virex API proxy (Cloudflare Worker) that holds the DeepSeek key and enforces
+/// plan limits. Overridable via `api_base` in settings.toml so the endpoint can
+/// be repointed without a rebuild.
+pub const DEFAULT_API_BASE: &str = "https://virex-api.phcodesage.workers.dev";
 
 /// Label of the floating overlay window.
 pub const OVERLAY_LABEL: &str = "overlay";

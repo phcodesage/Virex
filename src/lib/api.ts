@@ -19,6 +19,24 @@ export function setApiKey(key: string): Promise<void> {
   return invoke("set_api_key", { key });
 }
 
+/** What the API proxy reports about this device's plan and remaining quota. */
+export interface PlanInfo {
+  plan: "free" | "pro";
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+}
+
+/** Current plan + today's usage. */
+export function getPlan(): Promise<PlanInfo> {
+  return invoke("get_plan");
+}
+
+/** Store (or clear, when blank) a Pro licence key; returns the resulting plan. */
+export function setLicense(key: string): Promise<PlanInfo> {
+  return invoke("set_license", { key });
+}
+
 export function accessibilityTrusted(): Promise<boolean> {
   return invoke("accessibility_trusted");
 }
@@ -29,6 +47,11 @@ export function requestAccessibility(): Promise<void> {
 
 export function openAccessibilitySettings(): Promise<void> {
   return invoke("open_accessibility_settings");
+}
+
+/** Open a URL in the default browser. */
+export function openUrl(url: string): Promise<void> {
+  return invoke("open_url", { url });
 }
 
 /** Re-run the improvement on the last captured selection. */

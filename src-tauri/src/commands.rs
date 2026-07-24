@@ -53,6 +53,54 @@ pub fn set_api_key(key: String) -> CmdResult {
     keychain::set_api_key(&key).map_err(|e| e.to_string())
 }
 
+/// Store a Pro licence key. Returns whether the proxy accepts it.
+#[tauri::command]
+pub async fn set_license(state: State<'_, AppState>, key: String) -> CmdResult<PlanInfo> {
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        keychain::clear_license().map_err(|e| e.to_string())?;
+    } else {
+        keychain::set_license(&key).map_err(|e| e.to_string())?;
+    }
+    let base = state.settings().api_base().to_string();
+    fetch_plan(&base).await
+}
+
+/// Today's usage and current plan, for the Settings window.
+#[tauri::command]
+pub async fn get_plan(state: State<'_, AppState>) -> CmdResult<PlanInfo> {
+    let base = state.settings().api_base().to_string();
+    fetch_plan(&base).await
+}
+
+/// What the proxy reports about this device's plan and remaining quota.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct PlanInfo {
+    pub plan: String,
+    pub used: u32,
+    pub limit: Option<u32>,
+    pub remaining: Option<u32>,
+}
+
+async fn fetch_plan(api_base: &str) -> CmdResult<PlanInfo> {
+    let url = format!("{}/v1/usage", api_base.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.get(&url).header("X-Virex-Device", crate::device::id());
+    if let Some(license) = keychain::get_license() {
+        req = req.bearer_auth(license);
+    }
+
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("usage check failed ({})", resp.status()));
+    }
+    resp.json::<PlanInfo>().await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn accessibility_trusted() -> bool {
     accessibility::is_trusted()
@@ -66,6 +114,14 @@ pub fn request_accessibility() -> bool {
 #[tauri::command]
 pub fn open_accessibility_settings() {
     accessibility::open_settings();
+}
+
+/// Open a URL in the user's default browser (upgrade / pricing links).
+#[tauri::command]
+pub fn open_url(url: String) {
+    if url.starts_with("https://") {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
 }
 
 #[tauri::command]
@@ -128,10 +184,9 @@ pub async fn translate_message(
     }
 
     let target_lang = target_lang.unwrap_or_else(|| state.settings().target_lang.clone());
-    let api_key = keychain::get_api_key().unwrap_or_default();
     let settings = state.settings();
 
-    crate::translator::translate_and_paraphrase(&api_key, &settings, &text, &target_lang, |_| {})
+    crate::translator::translate_and_paraphrase(&settings, &text, &target_lang, |_| {})
         .await
         .map_err(|e| e.to_string())
 }

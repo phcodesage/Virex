@@ -1,0 +1,14 @@
+name = "virex-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+# Daily free-tier allowance. Pro licences bypass this entirely.
+[vars]
+FREE_DAILY_LIMIT = "10"
+
+# Counters (usage:<device>:<date>) and Pro licences (license:<key>).
+# Create with:  npx wrangler kv namespace create VIREX_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "VIREX_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"

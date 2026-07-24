@@ -37,6 +37,39 @@ pub fn has_api_key() -> bool {
     get_api_key().is_some()
 }
 
+fn license_entry() -> Result<Entry> {
+    Ok(Entry::new(
+        KEYCHAIN_SERVICE,
+        crate::config::KEYCHAIN_LICENSE_ACCOUNT,
+    )?)
+}
+
+/// Store the user's Pro licence key.
+pub fn set_license(key: &str) -> Result<()> {
+    license_entry()?.set_password(key)?;
+    Ok(())
+}
+
+/// Fetch the Pro licence key, if one has been entered.
+pub fn get_license() -> Option<String> {
+    match license_entry() {
+        Ok(e) => match e.get_password() {
+            Ok(k) if !k.trim().is_empty() => Some(k),
+            _ => None,
+        },
+        Err(_) => None,
+    }
+}
+
+/// Remove the stored licence (used when downgrading / signing out).
+pub fn clear_license() -> Result<()> {
+    match license_entry()?.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// If no key is stored yet but `DEEPSEEK_API_KEY` is present in the environment
 /// (e.g. loaded from a dev `.env`), seed the Keychain with it. This lets
 /// developers drop a key into `.env` without a plaintext key living long-term.

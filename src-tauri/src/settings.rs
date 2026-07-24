@@ -41,6 +41,21 @@ pub struct Settings {
     pub target_lang: String,
     #[serde(default = "default_paraphrase_translation")]
     pub paraphrase_translation: bool,
+    /// Virex API proxy base URL. Empty means "use the compiled-in default";
+    /// setting it lets the endpoint move without shipping a new build.
+    #[serde(default)]
+    pub api_base: String,
+}
+
+impl Settings {
+    /// The API proxy to talk to, falling back to the compiled-in default.
+    pub fn api_base(&self) -> &str {
+        if self.api_base.trim().is_empty() {
+            crate::config::DEFAULT_API_BASE
+        } else {
+            self.api_base.trim()
+        }
+    }
 }
 
 fn default_target_lang() -> String {
@@ -72,6 +87,7 @@ impl Default for Settings {
             base_url: "https://api.deepseek.com".into(),
             target_lang: "en".into(),
             paraphrase_translation: true,
+            api_base: String::new(),
         }
     }
 }
