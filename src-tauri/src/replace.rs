@@ -1,5 +1,6 @@
 //! Replacing the selected text in the source app with the rewritten text.
 
+use std::{thread, time::Duration};
 use anyhow::Result;
 
 use crate::input;
@@ -16,7 +17,9 @@ pub fn replace_selection(text: &str) -> Result<()> {
     input::set_clipboard_text(text)?;
     input::settle();
     input::send_paste()?;
-    input::settle();
+    
+    // Allow target app time to process paste before restoring previous content
+    thread::sleep(Duration::from_millis(350));
 
     if let Some(prev) = previous {
         let _ = input::set_clipboard_text(&prev);

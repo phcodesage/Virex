@@ -1,9 +1,7 @@
 //! Low-level input helpers: clipboard access and simulated ⌘C / ⌘V.
 //!
-//! These drive the "robust everywhere" text capture/replace strategy: rather
-//! than relying on per-app Accessibility text APIs (which are unreliable in
-//! Chrome, Electron, and many editors), we synthesize the system copy/paste
-//! shortcuts, which every text field on macOS honours.
+//! Synthesizes native system copy (⌘C) and paste (⌘V) shortcuts, which
+//! every text field on macOS honours.
 
 use std::{thread, time::Duration};
 
@@ -17,8 +15,7 @@ pub fn clipboard_text() -> Option<String> {
 }
 
 /// Poll the clipboard until its text differs from `baseline`, or `timeout_ms`
-/// elapses. Returns the final clipboard contents. Used after a synthesized ⌘C to
-/// accommodate apps (notably Catalyst) that write the pasteboard slowly.
+/// elapses. Returns the final clipboard contents.
 pub fn wait_for_clipboard_change(baseline: Option<&str>, timeout_ms: u64) -> Option<String> {
     let step = 50u64;
     let mut latest = clipboard_text();
@@ -42,8 +39,39 @@ pub fn set_clipboard_text(text: &str) -> Result<()> {
         .map_err(|e| anyhow!("clipboard write failed: {e}"))
 }
 
-/// Press ⌘ + `letter` as a single chord, with small gaps so slow apps register
-/// the modifier before the key.
+/// Send native macOS key combination (Command + KeyCode).
+/// Keycode 0x08 = 'C', Keycode 0x09 = 'V'.
+#[cfg(target_os = "macos")]
+fn send_cmd_key(virtual_key: u16) -> Result<()> {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| anyhow!("failed to create CGEventSource"))?;
+
+    let event_down = CGEvent::new_keyboard_event(source.clone(), virtual_key, true)
+        .map_err(|_| anyhow!("failed to create down event"))?;
+    event_down.set_flags(CGEventFlags::CGEventFlagCommand);
+    event_down.post(CGEventTapLocation::HID);
+
+    thread::sleep(Duration::from_millis(35));
+
+    let event_up = CGEvent::new_keyboard_event(source, virtual_key, false)
+        .map_err(|_| anyhow!("failed to create up event"))?;
+    event_up.set_flags(CGEventFlags::CGEventFlagCommand);
+    event_up.post(CGEventTapLocation::HID);
+
+    thread::sleep(Duration::from_millis(35));
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn send_cmd_key(virtual_key: u16) -> Result<()> {
+    let letter = if virtual_key == 0x08 { 'c' } else { 'v' };
+    cmd_chord(letter)
+}
+
+#[allow(dead_code)]
 fn cmd_chord(letter: char) -> Result<()> {
     let gap = Duration::from_millis(30);
     let mut enigo =
@@ -89,12 +117,10 @@ fn modifiers_held() -> bool {
     false
 }
 
-/// Block (up to ~800 ms) until the user lifts the trigger-shortcut modifier
-/// keys, so a following synthesized ⌘C isn't polluted by a stray Cmd/Shift.
+/// Block (up to ~800 ms) until the user lifts trigger/modifier keys.
 pub fn wait_modifiers_clear() {
     for _ in 0..40 {
         if !modifiers_held() {
-            // A hair of extra time after the last key comes up.
             thread::sleep(Duration::from_millis(20));
             return;
         }
@@ -104,16 +130,17 @@ pub fn wait_modifiers_clear() {
 
 /// Simulate ⌘C to copy the current selection into the clipboard.
 pub fn send_copy() -> Result<()> {
-    cmd_chord('c')
+    wait_modifiers_clear();
+    send_cmd_key(0x08)
 }
 
 /// Simulate ⌘V to paste clipboard contents at the current insertion point.
 pub fn send_paste() -> Result<()> {
-    cmd_chord('v')
+    wait_modifiers_clear();
+    send_cmd_key(0x09)
 }
 
-/// Small settle delay so the target app registers a synthesized shortcut before
-/// we read/write the clipboard again.
+/// Settle delay so target app registers a synthesized shortcut.
 pub fn settle() {
-    thread::sleep(Duration::from_millis(120));
+    thread::sleep(Duration::from_millis(150));
 }
