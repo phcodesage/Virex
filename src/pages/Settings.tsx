@@ -173,6 +173,11 @@ export const Settings: Component = () => {
             checked={s()!.showNotifications}
             onChange={(v) => patch({ showNotifications: v })}
           />
+          <Toggle
+            label="Refine translations with DeepSeek for clarity"
+            checked={s()!.paraphraseTranslation ?? true}
+            onChange={(v) => patch({ paraphraseTranslation: v })}
+          />
         </div>
 
         <div class="flex items-center gap-3 pt-2">

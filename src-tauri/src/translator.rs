@@ -108,10 +108,10 @@ where
     // Step 1: Translate using free Google Translate API
     let (raw_translation, detected_lang) = google_translate(text, target_lang).await?;
 
-    // Step 2: Paraphrase using DeepSeek for clarity (if API key is available)
-    let paraphrased = if !api_key.trim().is_empty() {
+    // Step 2: Paraphrase using DeepSeek for clarity (if enabled and API key is available)
+    let paraphrased = if settings.paraphrase_translation && !api_key.trim().is_empty() {
         let prompt = format!(
-            "You are an expert writing assistant and translator. Refine and paraphrase the following translated text into clear, fluent, natural {target_lang}.\n\nRules:\n- Preserve the exact meaning and key information.\n- Do not add explanations or meta commentary.\n- Output ONLY the final paraphrased text.\n\nText:\n{raw_translation}"
+            "You are a professional translator and editor. Refine the following translated text for maximum clarity, natural phrasing, and 100% semantic fidelity in {target_lang}.\n\nStrict Rules:\n- Maintain absolute accuracy to the original meaning.\n- Do NOT alter proper nouns, technical terms, dates, numbers, or core facts.\n- Do NOT summarize or add extra commentary.\n- Return ONLY the final refined translation.\n\nText:\n{raw_translation}"
         );
 
         match deepseek::stream_rewrite(

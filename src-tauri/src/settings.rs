@@ -39,10 +39,16 @@ pub struct Settings {
     pub base_url: String,
     #[serde(default = "default_target_lang")]
     pub target_lang: String,
+    #[serde(default = "default_paraphrase_translation")]
+    pub paraphrase_translation: bool,
 }
 
 fn default_target_lang() -> String {
     "en".into()
+}
+
+fn default_paraphrase_translation() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -66,6 +72,7 @@ impl Default for Settings {
             max_retries: 1,
             base_url: "https://api.deepseek.com".into(),
             target_lang: "en".into(),
+            paraphrase_translation: true,
         }
     }
 }

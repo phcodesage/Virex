@@ -16,6 +16,7 @@ export interface Settings {
   maxRetries: number;
   baseUrl: string;
   targetLang: string;
+  paraphraseTranslation: boolean;
 }
 
 export interface TranslationResult {
