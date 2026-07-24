@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  /* Transparent so the native NSVisualEffectView blur shows through. */
+  background: transparent;
+}
+
+body {
+  font-family: theme("fontFamily.sans");
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+/* The overlay content lives inside a rounded, blurred card. */
+.vx-card {
+  background: rgba(255, 255, 255, 0.72);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.22),
+    0 2px 8px rgba(0, 0, 0, 0.12);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+[data-theme="dark"] .vx-card {
+  background: rgba(30, 30, 32, 0.72);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Selectable output text inside the card. */
+.vx-selectable {
+  user-select: text;
+  cursor: text;
+}
+
+/* Form inputs in the Settings window. */
+.vx-input {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.02);
+  padding: 0.5rem 0.65rem;
+  font-size: 0.875rem;
+  color: inherit;
+  outline: none;
+}
+.vx-input:focus {
+  border-color: rgb(59, 130, 246);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+[data-theme="dark"] .vx-input {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Thin, native-feeling scrollbar. */
+.vx-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.vx-scroll::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 3px;
+}
