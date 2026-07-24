@@ -23,6 +23,10 @@ All links currently point at sensible defaults — confirm they're right:
 
 - **Download** → `https://github.com/phcodesage/Virex/releases/latest`
 - **GitHub** → `https://github.com/phcodesage/Virex`
-- **Ko-fi** → `https://ko-fi.com/phcodesage` *(create this handle, or change it)*
+- **Ko-fi** (tips) → `https://ko-fi.com/phcodesage`
+- **Get Pro** → `https://phcodesage.lemonsqueezy.com/` — **placeholder.** Create
+  the Lemon Squeezy $10/month subscription product with licence keys enabled,
+  then paste its real checkout URL here. Until then this button goes nowhere.
 
-Search `index.html` for those URLs to update them.
+Search `index.html` for those URLs to update them. Pricing lives in the
+`#pricing` section; the Pro price appears once, in the `.price` element.

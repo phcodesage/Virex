@@ -49,15 +49,37 @@ Headers: X-Virex-Device: <uuid>
 → { "plan": "free", "used": 3, "limit": 10, "remaining": 7 }
 ```
 
-## Issuing a Pro licence
+## Pro licences (Lemon Squeezy)
 
-Licences are just KV keys. After someone pays:
+Payment and licence issuing are handled by Lemon Squeezy — the Worker only
+*verifies* keys, so there are no accounts to build and nothing to issue by hand.
+
+1. Create a Lemon Squeezy store and a **subscription** product at $10/month.
+2. On the product, enable **licence keys** (one key per subscription).
+3. Copy your store id and product id into `wrangler.toml`
+   (`LEMONSQUEEZY_STORE_ID`, `LEMONSQUEEZY_PRODUCT_ID`) so keys minted by other
+   LS stores are rejected, then `npx wrangler deploy`.
+4. Point the landing page's **Get Pro** button at your LS checkout URL.
+
+Flow: customer subscribes → LS emails them a licence key → they paste it into
+Virex's Settings → the Worker validates it against LS and caches the verdict.
+Cancelling or refunding deactivates the key at LS; the Worker picks that up
+within 12 hours (the positive-cache TTL).
+
+### Comping someone / overriding
+
+Manually issued keys bypass Lemon Squeezy entirely:
 
 ```bash
-npx wrangler kv key put --binding VIREX_KV "license:VIREX-XXXX-XXXX" "active" --remote
+npx wrangler kv key put --binding VIREX_KV "license:VIREX-FRIEND-01" "active" --remote
 ```
 
-Revoke by deleting the key (or setting any value other than `active`).
+Revoke by deleting that key. To force an immediate re-check of an LS key
+(e.g. after a refund), delete its cached verdict:
+
+```bash
+npx wrangler kv key delete --binding VIREX_KV "pro:<their-key>" --remote
+```
 
 ## Cost
 

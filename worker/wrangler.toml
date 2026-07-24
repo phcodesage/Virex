@@ -5,6 +5,11 @@ compatibility_date = "2026-07-01"
 # Daily free-tier allowance. Pro licences bypass this entirely.
 [vars]
 FREE_DAILY_LIMIT = "10"
+# Lock Pro to keys from your own Lemon Squeezy store/product. Find these in the
+# LS dashboard (Store settings, and the product's URL). Leave blank to accept
+# any valid LS key — fine while testing, not for production.
+LEMONSQUEEZY_STORE_ID = ""
+LEMONSQUEEZY_PRODUCT_ID = ""
 
 # Counters (usage:<device>:<date>) and Pro licences (license:<key>).
 # Create with:  npx wrangler kv namespace create VIREX_KV

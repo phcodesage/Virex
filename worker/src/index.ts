@@ -17,6 +17,9 @@ export interface Env {
   VIREX_KV: KVNamespace;
   /** Optional override; defaults to 10. */
   FREE_DAILY_LIMIT?: string;
+  /** Lemon Squeezy store/product ids, so keys from other stores are rejected. */
+  LEMONSQUEEZY_STORE_ID?: string;
+  LEMONSQUEEZY_PRODUCT_ID?: string;
 }
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
@@ -87,10 +90,66 @@ function licenceOf(request: Request): string | null {
   return m ? m[1].trim() : null;
 }
 
+/** Cache a positive result for 12h and a negative one for 1h, so a cancellation
+ *  takes effect within half a day and a fresh purchase works within the hour. */
+const PRO_CACHE_OK_TTL = 60 * 60 * 12;
+const PRO_CACHE_BAD_TTL = 60 * 60;
+
+/**
+ * Is this licence currently entitled to Pro?
+ *
+ * Checks, in order: a manually-issued key in KV (for comps and refunds), a
+ * cached verdict, then Lemon Squeezy itself. Caching keeps the hot rewrite path
+ * from making a third-party call on every request.
+ */
 async function isPro(env: Env, licence: string | null): Promise<boolean> {
   if (!licence) return false;
-  const status = await env.VIREX_KV.get(`license:${licence}`);
-  return status === "active";
+
+  // Manually issued / comped keys.
+  if ((await env.VIREX_KV.get(`license:${licence}`)) === "active") return true;
+
+  const cached = await env.VIREX_KV.get(`pro:${licence}`);
+  if (cached === "active") return true;
+  if (cached === "inactive") return false;
+
+  const ok = await validateWithLemonSqueezy(env, licence);
+  await env.VIREX_KV.put(`pro:${licence}`, ok ? "active" : "inactive", {
+    expirationTtl: ok ? PRO_CACHE_OK_TTL : PRO_CACHE_BAD_TTL,
+  });
+  return ok;
+}
+
+/** Ask Lemon Squeezy whether a licence key is active for our product. */
+async function validateWithLemonSqueezy(env: Env, licence: string): Promise<boolean> {
+  try {
+    const resp = await fetch("https://api.lemonsqueezy.com/v1/licenses/validate", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ license_key: licence }),
+    });
+    if (!resp.ok) return false;
+
+    const data = (await resp.json()) as {
+      valid?: boolean;
+      license_key?: { status?: string };
+      meta?: { store_id?: number; product_id?: number };
+    };
+    if (!data.valid || data.license_key?.status !== "active") return false;
+
+    // Reject otherwise-valid keys issued by a different store or product.
+    const wantStore = env.LEMONSQUEEZY_STORE_ID;
+    const wantProduct = env.LEMONSQUEEZY_PRODUCT_ID;
+    if (wantStore && String(data.meta?.store_id ?? "") !== wantStore) return false;
+    if (wantProduct && String(data.meta?.product_id ?? "") !== wantProduct) return false;
+
+    return true;
+  } catch {
+    // Never let a licence-server hiccup break a paying user's rewrite.
+    return false;
+  }
 }
 
 async function planFor(request: Request, env: Env, device: string): Promise<Plan> {
