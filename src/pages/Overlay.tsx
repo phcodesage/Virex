@@ -48,28 +48,9 @@ export const Overlay: Component = () => {
   const doClose = () => void api.closeOverlay();
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      doClose();
-    } else if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       doReplace();
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
-      // Let native copy work when the user has a text selection; otherwise
-      // copy the whole result.
-      if (!window.getSelection()?.toString()) {
-        e.preventDefault();
-        doCopy();
-      }
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "r") {
-      e.preventDefault();
-      doRetry();
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "t") {
-      e.preventDefault();
-      doTranslate();
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
-      e.preventDefault();
-      doReplyNative();
     }
   };
 
@@ -127,17 +108,17 @@ export const Overlay: Component = () => {
                 onClick: doReplace,
                 disabled: status() === "loading" || status() === "error",
               },
-              { label: "Copy", hint: "⌘C", onClick: doCopy, disabled: !text() },
-              { label: "Translate", hint: "⌘T", onClick: doTranslate },
-              { label: "Reply Native", hint: "⌘N", onClick: doReplyNative },
-              { label: "Retry", hint: "⌘R", onClick: doRetry },
+              { label: "Copy", onClick: doCopy, disabled: !text() },
+              { label: "Translate", onClick: doTranslate },
+              { label: "Reply Native", onClick: doReplyNative },
+              { label: "Retry", onClick: doRetry },
             ]}
           />
           <button
             onClick={doClose}
             class="rounded-lg px-2 py-1.5 text-[13px] text-black/40 hover:bg-black/5 dark:text-white/40 dark:hover:bg-white/10"
           >
-            Esc
+            Close
           </button>
         </div>
       </div>

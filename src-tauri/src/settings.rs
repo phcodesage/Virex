@@ -60,9 +60,8 @@ impl Default for Settings {
             model: "deepseek-chat".into(),
             temperature: 0.7,
             system_prompt: DEFAULT_SYSTEM_PROMPT.into(),
-            // `CmdOrCtrl` = the Command key on macOS, which is what the
-            // physical Windows key maps to. More reliable than `Super`.
-            shortcut: "CmdOrCtrl+Shift+1".into(),
+            // `Super` = Windows key on Windows/Linux, Command key on macOS.
+            shortcut: "Super+Shift+1".into(),
             launch_at_login: false,
             auto_replace: true,
             auto_copy: false,

@@ -1,9 +1,9 @@
 import type { Component } from "solid-js";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 
 interface Action {
   label: string;
-  hint: string;
+  hint?: string;
   onClick: () => void;
   primary?: boolean;
   disabled?: boolean;
@@ -27,15 +27,17 @@ export const Toolbar: Component<{ actions: Action[] }> = (props) => {
             }}
           >
             <span>{a.label}</span>
-            <kbd
-              class="rounded px-1 text-[10px] leading-4 opacity-60"
-              classList={{
-                "bg-white/20": a.primary,
-                "bg-black/10 dark:bg-white/10": !a.primary,
-              }}
-            >
-              {a.hint}
-            </kbd>
+            <Show when={a.hint}>
+              <kbd
+                class="rounded px-1 text-[10px] leading-4 opacity-60"
+                classList={{
+                  "bg-white/20": a.primary,
+                  "bg-black/10 dark:bg-white/10": !a.primary,
+                }}
+              >
+                {a.hint}
+              </kbd>
+            </Show>
           </button>
         )}
       </For>
