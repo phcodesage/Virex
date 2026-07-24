@@ -133,9 +133,38 @@ Revoke by deleting that key (add `--remote`).
 Secrets in place: `DEEPSEEK_API_KEY`, `KOFI_VERIFICATION_TOKEN`, `ADMIN_TOKEN`
 (the admin token is kept locally in the gitignored `worker/.secrets.local`).
 
+## Site analytics
+
+The landing page reports anonymous events; stats are public plain text, so
+checking them is one curl with no login:
+
+```bash
+curl https://virex-api.rechceltoledo.workers.dev/stats.txt
+curl https://virex-api.rechceltoledo.workers.dev/stats.json   # same data, machine-readable
+```
+
+Tracked: `view`, `download`, `kofi`, `github`, plus unique visitors per day
+(last 14 days).
+
+`POST /v1/event` takes `{"event":"view","vid":"<random id>"}`. The visitor id is
+generated in the browser and kept in localStorage — no cookies, no IPs, no
+fingerprinting. Do Not Track and Global Privacy Control are honoured.
+
+Two things to know:
+
+- **The numbers are approximate.** KV has no atomic increment, so simultaneous
+  events of the *same* type can overwrite each other. Counters are stored one
+  key per (day, event) so different event types never collide, which covers the
+  common case.
+- **Stats are public.** That's deliberate — no auth to curl them — but anyone
+  who finds the URL can see your traffic.
+
 ## Cost
 
-Workers' free tier covers 100k requests/day and permits commercial use.
+Workers' free tier covers 100k requests/day and permits commercial use. Note
+the KV **write** limit of 1,000/day on the free plan: each tracked event costs
+1–2 writes, so heavy traffic could exhaust it and silently stop counting (and,
+more importantly, stop recording rewrite usage). Watch it if the site takes off.
 You pay DeepSeek for inference on *all* usage, including free-tier users —
 `FREE_DAILY_LIMIT` in `wrangler.toml` is the dial that caps that exposure.
 

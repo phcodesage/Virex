@@ -75,6 +75,15 @@ export default {
       if (url.pathname === "/admin/reset-seats" && request.method === "POST") {
         return await handleResetSeats(request, env, url);
       }
+      if (url.pathname === "/v1/event" && request.method === "POST") {
+        return cors(await handleEvent(request, env));
+      }
+      if (url.pathname === "/stats.txt" && request.method === "GET") {
+        return cors(await handleStatsText(env));
+      }
+      if (url.pathname === "/stats.json" && request.method === "GET") {
+        return cors(await handleStatsJson(env));
+      }
       if (url.pathname === "/") {
         return cors(json({ ok: true, service: "virex-api" }));
       }
@@ -279,6 +288,147 @@ async function handleRewrite(request: Request, env: Env): Promise<Response> {
       Connection: "keep-alive",
       "X-Virex-Plan": plan.pro ? "pro" : "free",
       "X-Virex-Remaining": plan.pro ? "unlimited" : String(Math.max(0, plan.remaining - 1)),
+    },
+  });
+}
+
+/* -------------------------------------------------------- site analytics */
+
+/** Events the landing page is allowed to report. Anything else is ignored. */
+const TRACKED_EVENTS = ["view", "download", "kofi", "github"] as const;
+type TrackedEvent = (typeof TRACKED_EVENTS)[number];
+
+type DayStats = Record<string, number>;
+
+/** Counter names stored per day, including derived "visitors". */
+const COUNTER_NAMES = [...TRACKED_EVENTS, "visitors"] as const;
+
+/** How many days `/stats.txt` shows. */
+const STATS_DAYS = 14;
+/** Unique-visitor markers only need to outlive their day. */
+const UNIQ_TTL_SECONDS = 60 * 60 * 48;
+
+/**
+ * One key per (day, counter) rather than a JSON blob per day.
+ *
+ * KV has no atomic increment, so a blob forces read-modify-write: two events
+ * arriving together both read the old value and the second write silently drops
+ * the first. Separate keys mean different event types can never clobber each
+ * other. Two of the *same* event in the same instant can still collide, so
+ * treat these numbers as close-but-approximate, which is fine for site stats.
+ */
+function counterKey(date: string, name: string): string {
+  return `stat:d:${date}:${name}`;
+}
+
+async function bumpCounter(env: Env, date: string, name: string): Promise<void> {
+  const key = counterKey(date, name);
+  const current = Number((await env.VIREX_KV.get(key)) ?? "0");
+  await env.VIREX_KV.put(key, String(current + 1));
+}
+
+async function readDay(env: Env, date: string): Promise<DayStats> {
+  const out: DayStats = {};
+  await Promise.all(
+    COUNTER_NAMES.map(async (name) => {
+      out[name] = Number((await env.VIREX_KV.get(counterKey(date, name))) ?? "0");
+    }),
+  );
+  return out;
+}
+
+/**
+ * Record a page view or click from the landing page.
+ *
+ * Deliberately anonymous: the visitor id is a random value the browser makes up
+ * and keeps in localStorage. No IPs, no fingerprinting, nothing personal — it
+ * exists only to tell repeat views apart from new visitors.
+ */
+async function handleEvent(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as
+    | { event?: string; vid?: string }
+    | null;
+
+  const name = body?.event as TrackedEvent | undefined;
+  if (!name || !TRACKED_EVENTS.includes(name)) return json({ error: "bad_event" }, 400);
+
+  const date = today();
+  await bumpCounter(env, date, name);
+
+  // Count a unique visitor the first time we see their id today.
+  const vid = body?.vid?.trim().slice(0, 64);
+  if (vid) {
+    const marker = `uniq:${date}:${vid}`;
+    if (!(await env.VIREX_KV.get(marker))) {
+      await env.VIREX_KV.put(marker, "1", { expirationTtl: UNIQ_TTL_SECONDS });
+      await bumpCounter(env, date, "visitors");
+    }
+  }
+
+  return new Response(null, { status: 204 });
+}
+
+/** The last `STATS_DAYS` days, newest first. */
+async function collectStats(env: Env): Promise<{ date: string; stats: DayStats }[]> {
+  const out: { date: string; stats: DayStats }[] = [];
+  const now = new Date();
+  for (let i = 0; i < STATS_DAYS; i++) {
+    const d = new Date(now.getTime() - i * 86400000).toISOString().slice(0, 10);
+    out.push({ date: d, stats: await readDay(env, d) });
+  }
+  return out;
+}
+
+function sumOf(rows: { stats: DayStats }[], name: string): number {
+  return rows.reduce((a, r) => a + (r.stats[name] ?? 0), 0);
+}
+
+/** Plain-text stats — public on purpose, so it's one curl with no auth. */
+async function handleStatsText(env: Env): Promise<Response> {
+  const rows = await collectStats(env);
+  const pad = (s: string | number, n: number) => String(s).padStart(n);
+
+  const lines = [
+    "Virex — site stats",
+    `generated  ${new Date().toISOString().replace("T", " ").slice(0, 19)} UTC`,
+    `window     last ${STATS_DAYS} days`,
+    "",
+    "date          views  uniq  downloads  ko-fi  github",
+    "------------------------------------------------------",
+    ...rows.map(
+      (r) =>
+        `${r.date}  ${pad(r.stats.view ?? 0, 5)} ${pad(r.stats.visitors ?? 0, 5)} ` +
+        `${pad(r.stats.download ?? 0, 10)} ${pad(r.stats.kofi ?? 0, 6)} ${pad(r.stats.github ?? 0, 7)}`,
+    ),
+    "------------------------------------------------------",
+    `total       ${pad(sumOf(rows, "view"), 5)} ${pad(sumOf(rows, "visitors"), 5)} ` +
+      `${pad(sumOf(rows, "download"), 10)} ${pad(sumOf(rows, "kofi"), 6)} ${pad(sumOf(rows, "github"), 7)}`,
+    "",
+  ];
+
+  return new Response(lines.join("\n"), {
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+async function handleStatsJson(env: Env): Promise<Response> {
+  const rows = await collectStats(env);
+  return json({
+    generated: new Date().toISOString(),
+    days: rows.map((r) => ({
+      date: r.date,
+      views: r.stats.view ?? 0,
+      visitors: r.stats.visitors ?? 0,
+      downloads: r.stats.download ?? 0,
+      kofi: r.stats.kofi ?? 0,
+      github: r.stats.github ?? 0,
+    })),
+    totals: {
+      views: sumOf(rows, "view"),
+      visitors: sumOf(rows, "visitors"),
+      downloads: sumOf(rows, "download"),
+      kofi: sumOf(rows, "kofi"),
+      github: sumOf(rows, "github"),
     },
   });
 }

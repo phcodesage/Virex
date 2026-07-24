@@ -541,6 +541,45 @@
 </footer>
 
 <script>
+  // Anonymous visit counting. No cookies, no IPs, no fingerprinting — just a
+  // random id in localStorage so repeat views can be told from new visitors.
+  (function () {
+    var API = "https://virex-api.rechceltoledo.workers.dev/v1/event";
+
+    // Honour Do Not Track / Global Privacy Control.
+    if (navigator.doNotTrack === "1" || window.doNotTrack === "1" || navigator.globalPrivacyControl) return;
+
+    var vid;
+    try {
+      vid = localStorage.getItem("vx_vid");
+      if (!vid) {
+        vid = (crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2) + Date.now();
+        localStorage.setItem("vx_vid", vid);
+      }
+    } catch (e) { /* private browsing — count it as a view without a visitor id */ }
+
+    function send(event) {
+      var payload = JSON.stringify({ event: event, vid: vid });
+      // text/plain is CORS-safelisted, so this skips the preflight. Using
+      // application/json would trigger one, and sendBeacon can't complete a
+      // preflighted request — it fails silently. The Worker parses the body as
+      // JSON regardless of the declared type.
+      if (navigator.sendBeacon) navigator.sendBeacon(API, new Blob([payload], { type: "text/plain;charset=UTF-8" }));
+      else fetch(API, { method: "POST", body: payload, headers: { "Content-Type": "text/plain;charset=UTF-8" }, keepalive: true }).catch(function () {});
+    }
+
+    send("view");
+
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a[href]");
+      if (!a) return;
+      var href = a.getAttribute("href") || "";
+      if (href.indexOf("/releases/") > -1) send("download");
+      else if (href.indexOf("ko-fi.com") > -1) send("kofi");
+      else if (href.indexOf("github.com") > -1) send("github");
+    }, true);
+  })();
+
   // Live in-place rewrite demo. Guarded for reduced-motion.
   (function () {
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
