@@ -91,6 +91,22 @@ and renewals both. `RESEND_API_KEY` is set as a Worker secret;
 To move to a different sender, verify the domain at Resend, update
 `LICENSE_FROM_EMAIL`, and redeploy.
 
+### Device limits
+
+A licence claims a seat per device, capped by `MAX_SEATS` (default 3). The first
+three devices to use a key are remembered; a fourth is refused and falls back to
+the free plan. That's what stops one key circulating in a group chat — accounts
+alone wouldn't, since login details are just as shareable.
+
+When someone legitimately changes machines:
+
+```bash
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \
+  "https://virex-api.rechceltoledo.workers.dev/admin/reset-seats?key=VIREX-XXXX-XXXX"
+```
+
+Seats are cleared immediately (unlike revocation, which waits on the KV cache).
+
 ### How cancellation works
 
 Licences carry a 35-day TTL that each monthly payment refreshes. Stop paying and

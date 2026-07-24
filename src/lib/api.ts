@@ -25,6 +25,10 @@ export interface PlanInfo {
   used: number;
   limit: number | null;
   remaining: number | null;
+  /** Licence is valid but already active on the maximum number of devices. */
+  seatLimited: boolean;
+  seatsUsed: number;
+  maxSeats: number;
 }
 
 /** Current plan + today's usage. */

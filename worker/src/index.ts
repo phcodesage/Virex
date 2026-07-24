@@ -19,6 +19,8 @@ export interface Env {
   FREE_DAILY_LIMIT?: string;
   /** Upstream model id; defaults to deepseek-v4-flash. */
   MODEL?: string;
+  /** Devices one licence may be used on; defaults to 3. */
+  MAX_SEATS?: string;
   /** From Ko-fi's webhook settings — proves a webhook really came from Ko-fi. */
   KOFI_VERIFICATION_TOKEN?: string;
   /** Minimum payment (in Ko-fi's currency units) that grants Pro. Default 10. */
@@ -70,6 +72,9 @@ export default {
       if (url.pathname === "/admin/license" && request.method === "GET") {
         return await handleAdminLookup(request, env, url);
       }
+      if (url.pathname === "/admin/reset-seats" && request.method === "POST") {
+        return await handleResetSeats(request, env, url);
+      }
       if (url.pathname === "/") {
         return cors(json({ ok: true, service: "virex-api" }));
       }
@@ -87,6 +92,9 @@ interface Plan {
   limit: number;
   used: number;
   remaining: number;
+  seatLimited: boolean;
+  seatsUsed: number;
+  maxSeats: number;
 }
 
 function today(): string {
@@ -106,15 +114,61 @@ function licenceOf(request: Request): string | null {
   return m ? m[1].trim() : null;
 }
 
+const DEFAULT_MAX_SEATS = 3;
+
+export interface Entitlement {
+  pro: boolean;
+  /** Licence is valid, but this device couldn't claim a seat. */
+  seatLimited: boolean;
+  seatsUsed: number;
+  maxSeats: number;
+}
+
 /**
+ * Whether this licence entitles *this device* to Pro.
+ *
  * Licences live in KV as `license:<key>` = "active", written by the Ko-fi
- * webhook. Monthly subscriptions get a 35-day TTL that each payment refreshes,
- * so a cancelled subscription lapses on its own — Ko-fi sends no "cancelled"
- * event we could rely on.
+ * webhook, with a 35-day TTL that each payment refreshes — so a cancelled
+ * subscription lapses on its own (Ko-fi sends no reliable "cancelled" event).
+ *
+ * A licence also claims seats: the first `MAX_SEATS` devices to use it are
+ * remembered, and any device beyond that is refused. That's what stops one key
+ * being passed around a group chat.
  */
-async function isPro(env: Env, licence: string | null): Promise<boolean> {
-  if (!licence) return false;
-  return (await env.VIREX_KV.get(`license:${licence}`)) === "active";
+async function entitlementFor(
+  env: Env,
+  licence: string | null,
+  device: string,
+): Promise<Entitlement> {
+  const maxSeats = Math.max(1, Number(env.MAX_SEATS ?? DEFAULT_MAX_SEATS));
+  const none: Entitlement = { pro: false, seatLimited: false, seatsUsed: 0, maxSeats };
+
+  if (!licence) return none;
+  if ((await env.VIREX_KV.get(`license:${licence}`)) !== "active") return none;
+
+  let devices: string[] = [];
+  try {
+    const raw = await env.VIREX_KV.get(`seats:${licence}`);
+    if (raw) devices = JSON.parse(raw);
+    if (!Array.isArray(devices)) devices = [];
+  } catch {
+    devices = [];
+  }
+
+  // Already a known device — always allowed, and doesn't consume a new seat.
+  if (devices.includes(device)) {
+    return { pro: true, seatLimited: false, seatsUsed: devices.length, maxSeats };
+  }
+
+  if (devices.length < maxSeats) {
+    devices.push(device);
+    await env.VIREX_KV.put(`seats:${licence}`, JSON.stringify(devices), {
+      expirationTtl: LICENSE_TTL_SECONDS,
+    });
+    return { pro: true, seatLimited: false, seatsUsed: devices.length, maxSeats };
+  }
+
+  return { pro: false, seatLimited: true, seatsUsed: devices.length, maxSeats };
 }
 
 /** A month plus a few days' grace, so a slightly late renewal doesn't lock someone out. */
@@ -128,14 +182,17 @@ function newLicenseKey(): string {
 }
 
 async function planFor(request: Request, env: Env, device: string): Promise<Plan> {
-  const pro = await isPro(env, licenceOf(request));
+  const ent = await entitlementFor(env, licenceOf(request), device);
   const limit = Number(env.FREE_DAILY_LIMIT ?? "10");
   const used = Number((await env.VIREX_KV.get(`usage:${device}:${today()}`)) ?? "0");
   return {
-    pro,
+    pro: ent.pro,
     limit,
     used,
-    remaining: pro ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
+    remaining: ent.pro ? Number.POSITIVE_INFINITY : Math.max(0, limit - used),
+    seatLimited: ent.seatLimited,
+    seatsUsed: ent.seatsUsed,
+    maxSeats: ent.maxSeats,
   };
 }
 
@@ -157,6 +214,9 @@ async function handleUsage(request: Request, env: Env): Promise<Response> {
     used: plan.used,
     limit: plan.pro ? null : plan.limit,
     remaining: plan.pro ? null : plan.remaining,
+    seat_limited: plan.seatLimited,
+    seats_used: plan.seatsUsed,
+    max_seats: plan.maxSeats,
   });
 }
 
@@ -171,12 +231,16 @@ async function handleRewrite(request: Request, env: Env): Promise<Response> {
 
   const plan = await planFor(request, env, device);
   if (!plan.pro && plan.remaining <= 0) {
+    const message = plan.seatLimited
+      ? `This licence is already in use on ${plan.maxSeats} devices, so this one is on the free plan — and today's ${plan.limit} free rewrites are gone.`
+      : `You've used all ${plan.limit} free rewrites today. Upgrade to Pro for unlimited.`;
     return json(
       {
-        error: "daily_limit_reached",
+        error: plan.seatLimited ? "seat_limit_reached" : "daily_limit_reached",
         limit: plan.limit,
         used: plan.used,
-        message: `You've used all ${plan.limit} free rewrites today. Upgrade to Pro for unlimited.`,
+        seat_limited: plan.seatLimited,
+        message,
       },
       429,
     );
@@ -405,6 +469,21 @@ function licenseEmailText(key: string, isRenewal: boolean): string {
   ].join("\n");
 }
 
+/**
+ * Clear a licence's claimed devices — for the "I bought a new Mac" support case.
+ * The next `MAX_SEATS` devices to use the key claim the freed seats.
+ */
+async function handleResetSeats(request: Request, env: Env, url: URL): Promise<Response> {
+  const token = request.headers.get("X-Admin-Token");
+  if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: "unauthorized" }, 401);
+
+  const key = url.searchParams.get("key")?.trim();
+  if (!key) return json({ error: "missing_key" }, 400);
+
+  await env.VIREX_KV.delete(`seats:${key}`);
+  return json({ ok: true, key, seats_cleared: true });
+}
+
 /** Look up the key issued to an email, for answering "where's my key?" support. */
 async function handleAdminLookup(request: Request, env: Env, url: URL): Promise<Response> {
   const token = request.headers.get("X-Admin-Token");
@@ -417,7 +496,21 @@ async function handleAdminLookup(request: Request, env: Env, url: URL): Promise<
   if (!key) return json({ found: false });
 
   const active = (await env.VIREX_KV.get(`license:${key}`)) === "active";
-  return json({ found: true, key, active });
+  let seats: string[] = [];
+  try {
+    const raw = await env.VIREX_KV.get(`seats:${key}`);
+    if (raw) seats = JSON.parse(raw);
+    if (!Array.isArray(seats)) seats = [];
+  } catch {
+    seats = [];
+  }
+  return json({
+    found: true,
+    key,
+    active,
+    seats_used: seats.length,
+    max_seats: Math.max(1, Number(env.MAX_SEATS ?? DEFAULT_MAX_SEATS)),
+  });
 }
 
 /* ----------------------------------------------------------------- helpers */

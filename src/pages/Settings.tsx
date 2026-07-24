@@ -58,6 +58,10 @@ export const Settings: Component = () => {
       if (result.plan === "pro") {
         setLicenseInput("");
         setShowLicense(false);
+      } else if (result.seatLimited) {
+        setLicenseError(
+          `That key is already in use on ${result.maxSeats} devices. Free up a device or contact support.`,
+        );
       } else if (license().trim()) {
         setLicenseError("That key isn't active. Check it and try again.");
       }
@@ -176,6 +180,13 @@ export const Settings: Component = () => {
                     ? "You've used today's rewrites. They reset tomorrow."
                     : `${plan()!.remaining} rewrites left today. Resets daily.`}
                 </p>
+                <Show when={plan()!.seatLimited}>
+                  <p class="mt-2 rounded-lg bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-400">
+                    Your Pro key is already active on {plan()!.maxSeats} devices,
+                    so this Mac is on the free plan. Deactivate another device or
+                    get in touch and we'll free a seat.
+                  </p>
+                </Show>
                 <div class="mt-3 flex items-center gap-2">
                   <button
                     onClick={() => api.openUrl(UPGRADE_URL)}
@@ -199,7 +210,12 @@ export const Settings: Component = () => {
               </span>
               <span class="text-xs opacity-60">{used()} today</span>
             </div>
-            <p class="mt-1 text-xs opacity-50">Thanks for supporting Virex.</p>
+            <p class="mt-1 text-xs opacity-50">
+              Thanks for supporting Virex.
+              <Show when={plan()!.maxSeats > 0}>
+                {" "}This key is on {plan()!.seatsUsed} of {plan()!.maxSeats} devices.
+              </Show>
+            </p>
           </Show>
         </Show>
 

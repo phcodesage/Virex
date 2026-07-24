@@ -75,11 +75,19 @@ pub async fn get_plan(state: State<'_, AppState>) -> CmdResult<PlanInfo> {
 
 /// What the proxy reports about this device's plan and remaining quota.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct PlanInfo {
     pub plan: String,
     pub used: u32,
     pub limit: Option<u32>,
     pub remaining: Option<u32>,
+    /// Licence is valid but already claimed by `max_seats` other devices.
+    #[serde(default, rename = "seat_limited")]
+    pub seat_limited: bool,
+    #[serde(default, rename = "seats_used")]
+    pub seats_used: u32,
+    #[serde(default, rename = "max_seats")]
+    pub max_seats: u32,
 }
 
 async fn fetch_plan(api_base: &str) -> CmdResult<PlanInfo> {
